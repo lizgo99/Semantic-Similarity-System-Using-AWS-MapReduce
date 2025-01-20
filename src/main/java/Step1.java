@@ -35,7 +35,8 @@ public class Step1 {
             String count = fields[2];
             String[] words = fields[1].split(" ");
 
-            // replace each word with it's stemmed version
+            String[][] parts = new String[words.length][4];
+            // Replace each word with it's stemmed version
             for (int i = 0; i < words.length; i++){
                 String word = words[i];
                 Stemmer stemmer = new Stemmer();
@@ -53,24 +54,26 @@ public class Step1 {
                     stemmer.stem();
                     words[i] = word.replace(oldWord, stemmer.toString());
                 }
+                parts[i] = words[i].split("/");
             }
 
-            for (String word : words) {
-                String[] parts = word.split("/"); // e.g. for/IN/prep/1
-                int pointer = Integer.parseInt(parts[3]);
+            for (String[] word : parts) {
+                int pointer = Integer.parseInt(word[3]);  // e.g. for/IN/prep/1
                 if (pointer == 0) {
                     continue;
                 }
 
                 // Count lexeme
-                context.write(new Text(String.format("L %s", words[pointer - 1])), new Text(count));
+                String lex = parts[pointer - 1][0];
+                context.write(new Text(String.format("l %s", lex)), new Text(count));
                 // Count feature
-                context.write(new Text(String.format("F %s-%s", parts[0], parts[2])), new Text(count));
+                String feat = word[0] + "-" +word[2];
+                context.write(new Text(String.format("f %s", feat)), new Text(count));
                 // Count lexeme feature pair
-                context.write(new Text(String.format("FL %s %s-%s", words[pointer - 1], parts[0], parts[2])), new Text(count));
+                context.write(new Text(String.format("lf %s %s", lex, feat)), new Text(count));
                 // Add to the total count of features and lexemes
-                context.getCounter("TotalCounters", "LTotal").increment(Integer.parseInt(count));
-                context.getCounter("TotalCounters", "FTotal").increment(Integer.parseInt(count));
+                context.getCounter("TotalCounters", "L").increment(Integer.parseInt(count));
+                context.getCounter("TotalCounters", "F").increment(Integer.parseInt(count));
             }
         }
     }
@@ -125,7 +128,7 @@ public class Step1 {
         // Write down Totals values to use in the next step
         if (success) {
 
-            String countersOutput = FileOutputFormat.getOutputPath(job).toString() + "/counters";
+            String countersOutput = "s3://" + jarBucketName  + "/counters";
             // Open file
             FileSystem fs = FileSystem.get(URI.create(countersOutput), new Configuration());
 

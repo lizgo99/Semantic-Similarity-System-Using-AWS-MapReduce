@@ -15,7 +15,7 @@ public class App {
     public static AmazonEC2 ec2;
     public static AmazonElasticMapReduce emr;
 
-    public static int numberOfInstances = 1;
+    public static int numberOfInstances = 3;
 
     public static String jarBucketName = "classifierinfo";
 
@@ -51,15 +51,15 @@ public class App {
                 .withHadoopJarStep(step1)
                 .withActionOnFailure("TERMINATE_JOB_FLOW");
 
-//        // Step 2
-//        HadoopJarStepConfig step2 = new HadoopJarStepConfig()
-//                .withJar("s3://" + jarBucketName + folderName + "Step2.jar")
-//                .withMainClass("Step2");
-//
-//        StepConfig stepConfig2 = new StepConfig()
-//                .withName("Step2")
-//                .withHadoopJarStep(step2)
-//                .withActionOnFailure("TERMINATE_JOB_FLOW");
+        // Step 2
+        HadoopJarStepConfig step2 = new HadoopJarStepConfig()
+                .withJar("s3://" + jarBucketName + folderName + "Step2.jar")
+                .withMainClass("Step2");
+
+        StepConfig stepConfig2 = new StepConfig()
+                .withName("Step2")
+                .withHadoopJarStep(step2)
+                .withActionOnFailure("TERMINATE_JOB_FLOW");
 //
 //        // Step 3
 //        HadoopJarStepConfig step3 = new HadoopJarStepConfig()
@@ -96,7 +96,8 @@ public class App {
         RunJobFlowRequest runFlowRequest = new RunJobFlowRequest()
                 .withName("Map reduce project")
                 .withInstances(instances)
-                .withSteps(stepConfig1)
+//                .withSteps(stepConfig1, stepConfig2)
+                .withSteps(stepConfig2)
                 .withLogUri("s3://" + jarBucketName + "/logs/")
                 .withServiceRole("EMR_DefaultRole")
                 .withJobFlowRole("EMR_EC2_DefaultRole")
