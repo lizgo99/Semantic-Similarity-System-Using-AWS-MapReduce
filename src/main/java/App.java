@@ -60,26 +60,26 @@ public class App {
                 .withName("Step2")
                 .withHadoopJarStep(step2)
                 .withActionOnFailure("TERMINATE_JOB_FLOW");
-//
-//        // Step 3
-//        HadoopJarStepConfig step3 = new HadoopJarStepConfig()
-//                .withJar("s3://" + jarBucketName + folderName + "Step3.jar")
-//                .withMainClass("Step3");
-//
-//        StepConfig stepConfig3 = new StepConfig()
-//                .withName("Step3")
-//                .withHadoopJarStep(step3)
-//                .withActionOnFailure("TERMINATE_JOB_FLOW");
-//
-//        // Step 4
-//        HadoopJarStepConfig step4 = new HadoopJarStepConfig()
-//                .withJar("s3://" + jarBucketName + folderName + "Step4.jar")
-//                .withMainClass("Step4");
-//
-//        StepConfig stepConfig4 = new StepConfig()
-//                .withName("Step4")
-//                .withHadoopJarStep(step4)
-//                .withActionOnFailure("TERMINATE_JOB_FLOW");
+
+        // Step 3
+        HadoopJarStepConfig step3 = new HadoopJarStepConfig()
+                .withJar("s3://" + jarBucketName + folderName + "Step3.jar")
+                .withMainClass("Step3");
+
+        StepConfig stepConfig3 = new StepConfig()
+                .withName("Step3")
+                .withHadoopJarStep(step3)
+                .withActionOnFailure("TERMINATE_JOB_FLOW");
+
+        // Step 4
+        HadoopJarStepConfig step4 = new HadoopJarStepConfig()
+                .withJar("s3://" + jarBucketName + folderName + "Step4.jar")
+                .withMainClass("Step4");
+
+        StepConfig stepConfig4 = new StepConfig()
+                .withName("Step4")
+                .withHadoopJarStep(step4)
+                .withActionOnFailure("TERMINATE_JOB_FLOW");
 
 
         // Job flow
@@ -96,7 +96,8 @@ public class App {
         RunJobFlowRequest runFlowRequest = new RunJobFlowRequest()
                 .withName("Map reduce project")
                 .withInstances(instances)
-                .withSteps(stepConfig1, stepConfig2)
+//                .withSteps(stepConfig1, stepConfig2, stepConfig3)
+                .withSteps(stepConfig3, stepConfig4)
                 .withLogUri("s3://" + jarBucketName + "/logs/")
                 .withServiceRole("EMR_DefaultRole")
                 .withJobFlowRole("EMR_EC2_DefaultRole")
