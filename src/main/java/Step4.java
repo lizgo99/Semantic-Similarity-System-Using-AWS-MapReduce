@@ -8,7 +8,6 @@ import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.fs.FileSystem;
 
@@ -167,7 +166,6 @@ public class Step4 {
         public double[][] simDice = new double[4][2];
         public double[][] simJS = new double[4][2];
 
-        private MultipleOutputs<Text, Text> multipleOutputs;
 
         /**
          *              distManhattan   distEuclidean   simCosine   simJaccard  simDice  simJS
@@ -177,10 +175,6 @@ public class Step4 {
          * assoc_t_test
          */
 
-        @Override
-        protected void setup(Context context) throws IOException, InterruptedException {
-            multipleOutputs = new MultipleOutputs<>(context);
-        }
 
         @Override
         public void reduce(CompositeKey compKey, Iterable<Text> values, Context context) throws IOException, InterruptedException {
@@ -196,15 +190,11 @@ public class Step4 {
 
             String[] lastVal = null;
 
-
-
             for (Text val : values) {
                 String[] parts = val.toString().split("\\s+");
                 if (parts.length != 6) {
                     continue;
                 }
-                multipleOutputs.write("keyValueOutput", key, val);
-                context.write(new Text(String.format("[DEBUG] key: %s %s | val:", w1, w2)) , val);
                 // Handle the first value
                 if (lastVal == null) {
                     lastVal = parts;
@@ -214,19 +204,15 @@ public class Step4 {
                 // Compare lastVal and parts
                 if (lastVal[0].equals(parts[0])) { // Complete pair
                     if (lastVal[1].equals(w1)) {
-                        context.write(new Text(String.format("[DEBUG1] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(parts))));
                         calculateDiff(lastVal, parts);
                     } else {
-                        context.write(new Text(String.format("[DEBUG2] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(parts))));
                         calculateDiff(parts, lastVal);
                     }
                     lastVal = null;
                 } else { // Incomplete pair
                     if (lastVal[1].equals(w1)) {
-                        context.write(new Text(String.format("[DEBUG3] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(ZEROS))));
                         calculateDiff(lastVal, ZEROS);
                     } else {
-                        context.write(new Text(String.format("[DEBUG4] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(ZEROS))));
                         calculateDiff(ZEROS, lastVal);
                     }
                     lastVal = parts;
@@ -236,10 +222,8 @@ public class Step4 {
             // Handle the last value if needed (in case of an incomplete pair)
             if (lastVal != null) {
                 if (lastVal[1].equals(w1)) {
-                    context.write(new Text(String.format("[DEBUG5] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(ZEROS))));
                     calculateDiff(lastVal, ZEROS);
                 } else {
-                    context.write(new Text(String.format("[DEBUG6] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(ZEROS))));
                     calculateDiff(ZEROS, lastVal);
                 }
             }
@@ -257,7 +241,7 @@ public class Step4 {
             }
 
             context.write(new Text(String.format("%s %s", w1,w2)), new Text(Arrays.deepToString(diffMetrix)));
-            clean();
+            cleanDiffMatrix();
         }
 
         private void calculateDiff(String[] l1,String[] l2){
@@ -269,7 +253,7 @@ public class Step4 {
 
                 double val1 = Double.parseDouble(l1[i].split("=")[1]);
                 double val2 = Double.parseDouble(l2[i].split("=")[1]);
-
+                
                 handleDistManhattan(i-2, val1, val2);
                 handleDistEuclidean(i-2, val1, val2);
                 handleSimCosine(i-2, val1, val2);
@@ -305,16 +289,22 @@ public class Step4 {
             simDice[i][1] += val1 + val2;
         }
 
-        private void handleSimJS(int i, double val1, double val2){
-
+        private void handleSimJS(int i, double val1, double val2) {
             double mean = (val1 + val2) / 2.0;
-            if (val1 > 0 || val2 > 0){
-                simJS[i][0] += val1 * Math.log(val1 / mean);
-                simJS[i][1] += val2 * Math.log(val2 / mean);
+
+            // When both values are 0, the contribution to JS divergence is 0
+            if (val1 == 0 && val2 == 0) {
+                simJS[i][0] = 0;
+                simJS[i][1] = 0;
+                return;
             }
+            // When val1 is 0, its contribution to KL divergence is 0
+            simJS[i][0] = (val1 > 0) ? val1 * Math.log(val1 / mean) : 0;
+            // When val2 is 0, its contribution to KL divergence is 0
+            simJS[i][1] = (val2 > 0) ? val2 * Math.log(val2 / mean) : 0;
         }
         
-        private void clean() {
+        private void cleanDiffMatrix() {
             Arrays.fill(distManhattan, 0);
             Arrays.fill(distEuclidean, 0);
 
@@ -324,11 +314,6 @@ public class Step4 {
                 Arrays.fill(simJaccard[i], 0);
                 Arrays.fill(simJS[i], 0);
             }
-        }
-
-        @Override
-        protected void cleanup(Context context) throws IOException, InterruptedException {
-            multipleOutputs.close();
         }
     }
 
@@ -393,8 +378,6 @@ public class Step4 {
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
         job.setOutputFormatClass(TextOutputFormat.class);
-
-        MultipleOutputs.addNamedOutput(job, "keyValueOutput", TextOutputFormat.class, Text.class, Text.class);
 
         job.setInputFormatClass(TextInputFormat.class);
         FileInputFormat.addInputPath(job, new Path("s3://" + jarBucketName + "/step3_output/"));
