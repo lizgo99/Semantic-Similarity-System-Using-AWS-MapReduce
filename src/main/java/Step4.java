@@ -2,6 +2,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
@@ -15,11 +17,55 @@ import java.net.URI;
 import java.util.*;
 
 public class Step4 {
+
+
+    public static class CompositeKey implements WritableComparable<CompositeKey> {
+        private String originalKey;
+        private String feature;
+
+        public CompositeKey() {
+        }
+
+        public CompositeKey(String originalKey, String feature) {
+            this.originalKey = originalKey;
+            this.feature = feature;
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeUTF(originalKey);
+            out.writeUTF(feature);
+        }
+
+        @Override
+        public void readFields(DataInput in) throws IOException {
+            originalKey = in.readUTF();
+            feature = in.readUTF();
+        }
+
+        @Override
+        public int compareTo(CompositeKey other) {
+            int cmp = this.originalKey.compareTo(other.originalKey);
+            if (cmp != 0) {
+                return cmp;
+            }
+            return this.feature.compareTo(other.feature);
+        }
+
+        public String getOriginalKey() {
+            return originalKey;
+        }
+
+        public String getFeature() {
+            return feature;
+        }
+    }
+
     ///
     /// input: ?
     /// output: ?
     ///
-    public static class MapperClass extends Mapper<LongWritable, Text, Text, Text> {
+    public static class MapperClass extends Mapper<LongWritable, Text, CompositeKey, Text> {
         public LinkedHashMap<String, HashSet<String>> GoldenStandard = new LinkedHashMap<>();
 
         @Override
@@ -91,8 +137,9 @@ public class Step4 {
                         w1 = lex;
                         w2 = wordToPos[0];
                     }
-
-                    context.write(new Text(String.format("%s %s", w1, w2)),
+                    String key = String.format("%s %s", w1, w2);
+                    CompositeKey compositeKey = new CompositeKey(key, feat);
+                    context.write(compositeKey,
                             new Text(String.format("%s %s %s %s %s %s", feat, lex, assoc_freq, assoc_prob, assoc_PMI, assoc_t_test)));
 
                 }
@@ -110,7 +157,7 @@ public class Step4 {
     }
 
 
-    public static class ReducerClass extends Reducer<Text, Text, Text, Text> {
+    public static class ReducerClass extends Reducer<CompositeKey, Text, Text, Text> {
         public final String[] ZEROS = {"_","_","0=0","0=0","0=0","0=0"};
 
         public double[] distManhattan = new double[4];
@@ -136,8 +183,9 @@ public class Step4 {
         }
 
         @Override
-        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+        public void reduce(CompositeKey compKey, Iterable<Text> values, Context context) throws IOException, InterruptedException {
             // Split the key into words
+            String key = compKey.getOriginalKey();
             String[] words = key.toString().split("\\s+");
             if (words.length != 2) {
                 return; // Invalid key format, skip processing
@@ -284,6 +332,40 @@ public class Step4 {
         }
     }
 
+    public static class PartitionerClass extends Partitioner<CompositeKey, Text> {
+        @Override
+        public int getPartition(CompositeKey key, Text value, int numPartitions) {
+            return (key.getOriginalKey().hashCode() & Integer.MAX_VALUE) % numPartitions;
+        }
+    }
+
+    public static class CompositeKeyComparator extends WritableComparator {
+        protected CompositeKeyComparator() {
+            super(CompositeKey.class, true);
+        }
+
+        @Override
+        public int compare(WritableComparable a, WritableComparable b) {
+            CompositeKey key1 = (CompositeKey) a;
+            CompositeKey key2 = (CompositeKey) b;
+            return key1.compareTo(key2);
+        }
+    }
+
+    public static class OriginalKeyGroupingComparator extends WritableComparator {
+        protected OriginalKeyGroupingComparator() {
+            super(CompositeKey.class, true);
+        }
+    
+        @Override
+        public int compare(WritableComparable a, WritableComparable b) {
+            CompositeKey key1 = (CompositeKey) a;
+            CompositeKey key2 = (CompositeKey) b;
+            return key1.getOriginalKey().compareTo(key2.getOriginalKey());
+        }
+    }
+    
+
 
     public static void main(String[] args) throws Exception {
         System.out.println("[DEBUG] STEP 4 started!");
@@ -292,17 +374,22 @@ public class Step4 {
 
         Configuration conf = new Configuration();
 
-        Job job = Job.getInstance(conf, "Step3");
+        Job job = Job.getInstance(conf, "Step4");
 
 //        job.getConfiguration().setLong("mapreduce.input.fileinputformat.split.maxsize", 64 * 1024 * 1024); // 64MB (default is 128MB)
 
         job.setJarByClass(Step4.class);
         job.setMapperClass(MapperClass.class);
         job.setReducerClass(ReducerClass.class);
-//        job.setCombinerClass(Step3.ReducerClass.class);
-//        job.setPartitionerClass(Step3.PartitionerClass.class);
+//        job.setCombinerClass(ReducerClass.class);
 
+        job.setGroupingComparatorClass(OriginalKeyGroupingComparator.class);
+        job.setSortComparatorClass(CompositeKeyComparator.class);
+        job.setPartitionerClass(Step4.PartitionerClass.class);
 
+        job.setMapOutputKeyClass(CompositeKey.class);
+        job.setMapOutputValueClass(Text.class);
+        
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
         job.setOutputFormatClass(TextOutputFormat.class);
