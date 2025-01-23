@@ -94,7 +94,7 @@ public class Step3 {
     public static void main(String[] args) throws Exception {
         System.out.println("[DEBUG] STEP 3 started!");
 
-        String jarBucketName = "classifierinfo";
+        String jarBucketName = "classifierinfo1";
 
         String s3InputPath = "s3a://" + jarBucketName + "/counters";
         FileSystem fs = FileSystem.get(URI.create(s3InputPath), new Configuration());

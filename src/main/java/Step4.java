@@ -6,15 +6,13 @@ import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.fs.FileSystem;
 
-
 import java.io.*;
 import java.net.URI;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-
+import java.util.*;
 
 public class Step4 {
     ///
@@ -22,12 +20,13 @@ public class Step4 {
     /// output: ?
     ///
     public static class MapperClass extends Mapper<LongWritable, Text, Text, Text> {
-        public LinkedHashMap<String, LinkedList<String>> GoldenStandard = new LinkedHashMap<>();
+        public LinkedHashMap<String, HashSet<String>> GoldenStandard = new LinkedHashMap<>();
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
-            String jarBucketName = "classifierinfo";
-            String s3InputPath = "s3a://" + jarBucketName + "/word-relatedness.txt";
+            String jarBucketName = "classifierinfo1";
+//            String s3InputPath = "s3a://" + jarBucketName + "/word-relatedness.txt";
+            String s3InputPath = "s3a://" + jarBucketName + "/test_gold_standard.txt";
 
             // Configure the FileSystem
             FileSystem fs = FileSystem.get(URI.create(s3InputPath), new Configuration());
@@ -45,19 +44,25 @@ public class Step4 {
                         continue;
                     }
 
+                    String word1 = parts[0];
+                    String word2 = parts[1];
+//                    String isRelated = parts[2];
+
                     // Add words to the GoldenStandard map
-                    addToGoldenStandard(parts[0], parts[1]);
-                    addToGoldenStandard(parts[1], parts[0]);
+                    addToGoldenStandard(word1, word2 + " 1");
+                    addToGoldenStandard(word2, word1 + " 0");
                 }
             }
         }
 
-        /**
-         * Helper method to add word relationships to the GoldenStandard map.
-         */
-        private void addToGoldenStandard(String key, String value) {
-            GoldenStandard.computeIfAbsent(key, k -> new LinkedList<>()).add(value);
-        }
+         /**
+          * Helper method to add word relationships to the GoldenStandard map.
+          */
+         private void addToGoldenStandard(String key, String value) {
+             GoldenStandard.computeIfAbsent(key, k -> new HashSet<>()).add(value);
+         }
+
+
 
         @Override
         public void map(LongWritable lineId, Text line, Context context) throws IOException, InterruptedException {
@@ -74,24 +79,48 @@ public class Step4 {
             String assoc_PMI = fields[4];
             String assoc_t_test = fields[5];
 
-            if (GoldenStandard.containsKey(lex)){
+             if (GoldenStandard.containsKey(lex)){
+                 String w1;
+                 String w2;
                 for (String val : GoldenStandard.get(lex)){
-                    context.write(new Text(String.format("%s %s", lex, val)),
-                            new Text(String.format("%s %s assoc_freq=%s assoc_prob=%s assoc_PMI=%s assoc_t_test=%s", feat, lex, assoc_freq, assoc_prob, assoc_PMI, assoc_t_test)));
+                    String[] wordToPos = val.split(" ");
+                    if (wordToPos[1].equals("0")) {
+                        w1 = wordToPos[0];
+                        w2 = lex;
+                    } else {
+                        w1 = lex;
+                        w2 = wordToPos[0];
+                    }
+
+                    context.write(new Text(String.format("%s %s", w1, w2)),
+                            new Text(String.format("%s %s %s %s %s %s", feat, lex, assoc_freq, assoc_prob, assoc_PMI, assoc_t_test)));
+
                 }
-            }
+            
+             }
+
+                // about us-pobj   _ _ _ _
+                // in Golden
+                // about in
+                // about else
+                // what about
+                // about {0 in True}
+                // in {1 about True}
         }
     }
 
 
     public static class ReducerClass extends Reducer<Text, Text, Text, Text> {
-//        public double[][] diffMetrix = new double[4][6];
+        public final String[] ZEROS = {"_","_","0=0","0=0","0=0","0=0"};
+
         public double[] distManhattan = new double[4];
         public double[] distEuclidean = new double[4];
         public double[][] simCosine = new double[4][3];
         public double[][] simJaccard = new double[4][2];
         public double[][] simDice = new double[4][2];
         public double[][] simJS = new double[4][2];
+
+        private MultipleOutputs<Text, Text> multipleOutputs;
 
         /**
          *              distManhattan   distEuclidean   simCosine   simJaccard  simDice  simJS
@@ -103,7 +132,7 @@ public class Step4 {
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
-
+            multipleOutputs = new MultipleOutputs<>(context);
         }
 
         @Override
@@ -113,17 +142,21 @@ public class Step4 {
             if (words.length != 2) {
                 return; // Invalid key format, skip processing
             }
+
             String w1 = words[0];
             String w2 = words[1];
 
             String[] lastVal = null;
+
+
 
             for (Text val : values) {
                 String[] parts = val.toString().split("\\s+");
                 if (parts.length != 6) {
                     continue;
                 }
-
+                multipleOutputs.write("keyValueOutput", key, val);
+                context.write(new Text(String.format("[DEBUG] key: %s %s | val:", w1, w2)) , val);
                 // Handle the first value
                 if (lastVal == null) {
                     lastVal = parts;
@@ -133,16 +166,20 @@ public class Step4 {
                 // Compare lastVal and parts
                 if (lastVal[0].equals(parts[0])) { // Complete pair
                     if (lastVal[1].equals(w1)) {
+                        context.write(new Text(String.format("[DEBUG1] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(parts))));
                         calculateDiff(lastVal, parts);
                     } else {
+                        context.write(new Text(String.format("[DEBUG2] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(parts))));
                         calculateDiff(parts, lastVal);
                     }
                     lastVal = null;
-                } else {
-                    if (lastVal[1].equals(w1)) { // Incomplete pair
-                        calculateDiff(lastVal, null);
+                } else { // Incomplete pair
+                    if (lastVal[1].equals(w1)) {
+                        context.write(new Text(String.format("[DEBUG3] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(ZEROS))));
+                        calculateDiff(lastVal, ZEROS);
                     } else {
-                        calculateDiff(null, lastVal);
+                        context.write(new Text(String.format("[DEBUG4] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(ZEROS))));
+                        calculateDiff(ZEROS, lastVal);
                     }
                     lastVal = parts;
                 }
@@ -151,14 +188,28 @@ public class Step4 {
             // Handle the last value if needed (in case of an incomplete pair)
             if (lastVal != null) {
                 if (lastVal[1].equals(w1)) {
-                    calculateDiff(lastVal, null);
+                    context.write(new Text(String.format("[DEBUG5] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(ZEROS))));
+                    calculateDiff(lastVal, ZEROS);
                 } else {
-                    calculateDiff(null, lastVal);
+                    context.write(new Text(String.format("[DEBUG6] lastVal: %s", Arrays.toString(lastVal))), new Text(String.format("parts: %s", Arrays.toString(ZEROS))));
+                    calculateDiff(ZEROS, lastVal);
                 }
             }
 
             // Final calculations
+            double[][] diffMetrix = new double[4][6];
 
+            for (int i = 0; i < 4; i++) {
+                diffMetrix[i][0] = distManhattan[i];
+                diffMetrix[i][1] = Math.sqrt(distEuclidean[i]);
+                diffMetrix[i][2] = simCosine[i][0] / (Math.sqrt(simCosine[i][1]) * Math.sqrt(simCosine[i][2]));
+                diffMetrix[i][3] = simJaccard[i][0] / simJaccard[i][1];
+                diffMetrix[i][4] = 2 * simDice[i][0] / simDice[i][1];
+                diffMetrix[i][5] = simJS[i][0] + simJS[i][1];
+            }
+
+            context.write(new Text(String.format("%s %s", w1,w2)), new Text(Arrays.deepToString(diffMetrix)));
+            clean();
         }
 
         private void calculateDiff(String[] l1,String[] l2){
@@ -167,6 +218,7 @@ public class Step4 {
             }
 
             for (int i = 2; i < l1.length; i++) {
+
                 double val1 = Double.parseDouble(l1[i].split("=")[1]);
                 double val2 = Double.parseDouble(l2[i].split("=")[1]);
 
@@ -202,57 +254,51 @@ public class Step4 {
         private void handleSimDice(int i, double val1, double val2){
 
             simDice[i][0] += Math.min(val1,val2);
-//            simDice[i][1] +=
+            simDice[i][1] += val1 + val2;
         }
 
         private void handleSimJS(int i, double val1, double val2){
 
+            double mean = (val1 + val2) / 2.0;
+            if (val1 > 0 || val2 > 0){
+                simJS[i][0] += val1 * Math.log(val1 / mean);
+                simJS[i][1] += val2 * Math.log(val2 / mean);
+            }
+        }
+        
+        private void clean() {
+            Arrays.fill(distManhattan, 0);
+            Arrays.fill(distEuclidean, 0);
+
+            for (int i = 0; i < 4; i++) {
+                Arrays.fill(simCosine[i], 0);
+                Arrays.fill(simDice[i], 0);
+                Arrays.fill(simJaccard[i], 0);
+                Arrays.fill(simJS[i], 0);
+            }
+        }
+
+        @Override
+        protected void cleanup(Context context) throws IOException, InterruptedException {
+            multipleOutputs.close();
         }
     }
-
 
 
     public static void main(String[] args) throws Exception {
         System.out.println("[DEBUG] STEP 4 started!");
 
-        String jarBucketName = "classifierinfo";
-
-        String s3InputPath = "s3a://" + jarBucketName + "/counters";
-        FileSystem fs = FileSystem.get(URI.create(s3InputPath), new Configuration());
-        String L = null;
-        String F = null;
-
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(new Path(s3InputPath))))) {
-            // Read the first line only
-            String line = reader.readLine();
-            while (line != null) {
-                if (line.startsWith("L") || line.startsWith("F")) {
-                    String[] parts = line.split(" ");
-                    if (parts[0].equals("L")) {
-                        L = parts[1];
-                    } else {
-                        F = parts[1];
-                    }
-                }
-                line = reader.readLine();
-            }
-        }
-
-        if (L == null || F == null) {
-            throw new RuntimeException("Total counters haven't been found!");
-        }
+        String jarBucketName = "classifierinfo1";
 
         Configuration conf = new Configuration();
-        conf.set("L", L);
-        conf.set("F", F);
 
         Job job = Job.getInstance(conf, "Step3");
 
 //        job.getConfiguration().setLong("mapreduce.input.fileinputformat.split.maxsize", 64 * 1024 * 1024); // 64MB (default is 128MB)
 
-        job.setJarByClass(Step3.class);
-        job.setMapperClass(Step3.MapperClass.class);
-        job.setReducerClass(Step3.ReducerClass.class);
+        job.setJarByClass(Step4.class);
+        job.setMapperClass(MapperClass.class);
+        job.setReducerClass(ReducerClass.class);
 //        job.setCombinerClass(Step3.ReducerClass.class);
 //        job.setPartitionerClass(Step3.PartitionerClass.class);
 
@@ -261,10 +307,12 @@ public class Step4 {
         job.setOutputValueClass(Text.class);
         job.setOutputFormatClass(TextOutputFormat.class);
 
-        job.setInputFormatClass(TextInputFormat.class);
-        FileInputFormat.addInputPath(job, new Path("s3://" + jarBucketName + "/step2_output/"));
+        MultipleOutputs.addNamedOutput(job, "keyValueOutput", TextOutputFormat.class, Text.class, Text.class);
 
-        FileOutputFormat.setOutputPath(job, new Path("s3://" + jarBucketName + "/step3_output/"));
+        job.setInputFormatClass(TextInputFormat.class);
+        FileInputFormat.addInputPath(job, new Path("s3://" + jarBucketName + "/step3_output/"));
+
+        FileOutputFormat.setOutputPath(job, new Path("s3://" + jarBucketName + "/step4_output/"));
 
         boolean success = job.waitForCompletion(true);
         System.exit(success ? 0 : 1);

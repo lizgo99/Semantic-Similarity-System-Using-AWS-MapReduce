@@ -17,7 +17,7 @@ public class App {
 
     public static int numberOfInstances = 3;
 
-    public static String jarBucketName = "classifierinfo";
+    public static String jarBucketName = "classifierinfo1";
 
     public static String folderName = "/jars/";
 
@@ -97,7 +97,8 @@ public class App {
                 .withName("Map reduce project")
                 .withInstances(instances)
 //                .withSteps(stepConfig1, stepConfig2, stepConfig3)
-                .withSteps(stepConfig3, stepConfig4)
+//                .withSteps(stepConfig3, stepConfig4)
+                .withSteps(stepConfig4)
                 .withLogUri("s3://" + jarBucketName + "/logs/")
                 .withServiceRole("EMR_DefaultRole")
                 .withJobFlowRole("EMR_EC2_DefaultRole")

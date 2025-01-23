@@ -81,7 +81,7 @@ public class Step2 {
     public static void main(String[] args) throws Exception {
         System.out.println("[DEBUG] STEP 2 started!");
 
-        String jarBucketName = "classifierinfo";
+        String jarBucketName = "classifierinfo1";
 
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "Step2");

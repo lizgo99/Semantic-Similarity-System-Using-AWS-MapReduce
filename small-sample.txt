@@ -16,6 +16,16 @@ abounded	abounded/VBD/ccomp/0 in/IN/prep/1 many/JJ/amod/4 groups/NNS/pobj/2	12	1
 abounded	abounded/VBD/ccomp/0 in/IN/prep/1 means/NN/pobj/2 of/IN/prep/3 defence/NN/pobj/4	23	1852,4	1855,1	1856,1	1860,1	1864,2	1871,1	1876,2	1878,1	1883,3	1888,2	1890,2	1891,1	1967,1	2002,1
 abounded	abounded/VBD/ccomp/0 in/IN/prep/1 metaphor/NN/pobj/2 were/VBD/advcl/1	14	1865,1	1873,2	1877,1	1881,1	1882,1	1886,1	1891,1	1894,1	1898,1	1900,1	2007,1	2008,2
 abounded	abounded/VBD/ccomp/0 in/IN/prep/1 middle/NNP/nn/4 ages/NNPS/pobj/2	10	1909,1	1913,1	1914,5	1965,1	1991,1	2004,1
+abounds	abounds/VBZ/ROOT/0 particularly/RB/advmod/1 in/IN/prep/1 trent/NNP/pobj/3	16	1863,1	1885,5	1889,2	1893,1	1901,1	1903,1	2005,1	2008,4
+abounds	abounds/VBZ/ROOT/0 particularly/RB/advmod/3 carp/VB/conj/1 and/CC/cc/1	12	1822,4	1995,2	2004,1	2006,1	2007,2	2008,2
+abounds	abounds/VBZ/ROOT/0 particularly/RB/advmod/3 ducks/NNS/dobj/1	18	1824,2	1826,1	1827,4	1829,1	1830,3	1836,1	1838,1	1851,2	1906,2	1996,1
+abounds	abounds/VBZ/ROOT/0 particularly/RB/advmod/3 pike/JJ/dep/1	14	1904,4	1922,4	1971,1	2005,1	2006,1	2007,3
+abounds	abounds/VBZ/ROOT/0 particularly/RB/advmod/3 salmon/NN/dobj/1	10	1811,2	1873,1	1878,1	1894,2	2004,1	2007,1	2008,2
+abounds	abounds/VBZ/ROOT/0 particularly/RB/advmod/3 species/NNS/dobj/1	12	1868,3	1878,4	1891,5
+abounds	abounds/VBZ/ROOT/0 particularly/RB/advmod/3 sturgeon/NN/dobj/1	17	1815,2	1826,2	1837,2	1839,1	1850,1	1885,3	1904,1	1907,1	1912,2	1927,2
+abounds	abounds/VBZ/ROOT/0 particularly/RB/advmod/3 trout/NN/dobj/1	12	1819,2	1859,1	1860,2	1861,2	1875,1	1969,2	1986,1	2001,1
+abounds	abounds/VBZ/ROOT/0 particularly/RB/dep/3 in/IN/conj/1 and/CC/cc/1	11	1794,1	1824,2	1830,3	1831,2	1840,1	1842,1	1856,1
+abounds	abounds/VBZ/ROOT/0 passes/VBZ/ccomp/3 have/VBP/ccomp/1	30	1827,1	1850,2	1854,1	1859,1	1862,1	1870,1	1879,3	1889,1	1901,5	1906,9	1907,1	1928,1	1949,1	1966,1	1996,1
 about	about/IN/conj/0 us/PRP/pobj/1 and/CC/cc/1 beneath/IN/conj/1	12	1854,1	1867,1	1872,2	1881,3	1892,1	1996,1	2004,1	2005,1	2007,1
 about	about/IN/conj/0 us/PRP/pobj/1 fire/NN/dep/2	15	1917,5	1935,1	2007,3	2008,6
 about	about/IN/conj/0 us/PRP/pobj/1 is/VBZ/rcmod/2	10	1885,1	1896,1	1903,2	1975,1	1978,1	2007,1	2008,3

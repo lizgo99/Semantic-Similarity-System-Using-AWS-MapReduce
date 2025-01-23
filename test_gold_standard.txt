@@ -1,0 +1,4 @@
+about	us	True
+abound	about	False
+about	in	False
+in  about False
