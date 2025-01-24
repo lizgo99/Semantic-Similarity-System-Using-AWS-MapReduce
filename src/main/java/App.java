@@ -81,6 +81,19 @@ public class App {
                 .withHadoopJarStep(step4)
                 .withActionOnFailure("TERMINATE_JOB_FLOW");
 
+        // Step 5
+        HadoopJarStepConfig step5 = new HadoopJarStepConfig()
+                .withJar("s3://" + jarBucketName + folderName + "WekaModelStep.jar")
+                .withMainClass("WekaModelStep")
+                .withArgs(jarBucketName, 
+                        "step4_output/",
+                        "step5_output/");
+        
+        StepConfig stepConfig5 = new StepConfig()
+                .withName("WekaModelStep")
+                .withHadoopJarStep(step5)
+                .withActionOnFailure("TERMINATE_JOB_FLOW");
+
 
         // Job flow
         JobFlowInstancesConfig instances = new JobFlowInstancesConfig()
@@ -96,9 +109,9 @@ public class App {
         RunJobFlowRequest runFlowRequest = new RunJobFlowRequest()
                 .withName("Map reduce project")
                 .withInstances(instances)
-//                .withSteps(stepConfig1, stepConfig2, stepConfig3)
-//                .withSteps(stepConfig3, stepConfig4)
-                .withSteps(stepConfig4)
+        //        .withSteps(stepConfig1, stepConfig2, stepConfig3, stepConfig4)
+                // .withSteps(stepConfig4)
+                .withSteps(stepConfig5)
                 .withLogUri("s3://" + jarBucketName + "/logs/")
                 .withServiceRole("EMR_DefaultRole")
                 .withJobFlowRole("EMR_EC2_DefaultRole")

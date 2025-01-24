@@ -8,7 +8,9 @@ import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 
 import java.io.*;
@@ -21,25 +23,29 @@ public class Step4 {
     public static class CompositeKey implements WritableComparable<CompositeKey> {
         private String originalKey;
         private String feature;
+        private String isRelated;
 
         public CompositeKey() {
         }
 
-        public CompositeKey(String originalKey, String feature) {
+        public CompositeKey(String originalKey, String feature, String isRelated) {
             this.originalKey = originalKey;
             this.feature = feature;
+            this.isRelated = isRelated;
         }
 
         @Override
         public void write(DataOutput out) throws IOException {
             out.writeUTF(originalKey);
             out.writeUTF(feature);
+            out.writeUTF(isRelated);
         }
 
         @Override
         public void readFields(DataInput in) throws IOException {
             originalKey = in.readUTF();
             feature = in.readUTF();
+            isRelated = in.readUTF();
         }
 
         @Override
@@ -58,6 +64,10 @@ public class Step4 {
         public String getFeature() {
             return feature;
         }
+
+        public String getIsRelated() {
+            return isRelated;
+        }
     }
 
     ///
@@ -66,9 +76,12 @@ public class Step4 {
     ///
     public static class MapperClass extends Mapper<LongWritable, Text, CompositeKey, Text> {
         public LinkedHashMap<String, HashSet<String>> GoldenStandard = new LinkedHashMap<>();
+        private MultipleOutputs<CompositeKey, Text> multipleOutputs;
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
+            multipleOutputs = new MultipleOutputs<>(context);
+
             String jarBucketName = "classifierinfo1";
 //            String s3InputPath = "s3a://" + jarBucketName + "/word-relatedness.txt";
             String s3InputPath = "s3a://" + jarBucketName + "/test_gold_standard.txt";
@@ -91,11 +104,13 @@ public class Step4 {
 
                     String word1 = parts[0];
                     String word2 = parts[1];
-//                    String isRelated = parts[2];
+                    String isRelated = parts[2];
+
+                    // ADD STEMMING
 
                     // Add words to the GoldenStandard map
-                    addToGoldenStandard(word1, word2 + " 1");
-                    addToGoldenStandard(word2, word1 + " 0");
+                    addToGoldenStandard(word1, word2 + " 1 " + isRelated);
+                    addToGoldenStandard(word2, word1 + " 0 " + isRelated);
                 }
             }
         }
@@ -129,34 +144,42 @@ public class Step4 {
                  String w2;
                 for (String val : GoldenStandard.get(lex)){
                     String[] wordToPos = val.split(" ");
-                    if (wordToPos[1].equals("0")) {
+                    String pos = wordToPos[1];
+                    String isRelated = wordToPos[2];
+
+                    if (pos.equals("0")) {
                         w1 = wordToPos[0];
                         w2 = lex;
                     } else {
                         w1 = lex;
                         w2 = wordToPos[0];
                     }
+                    multipleOutputs.write("debugOutput", new Text(String.format("[DEBUG] mapper key: %s %s", w1,w2)), new Text(String.format("pos:%s isRelated:%s", pos, isRelated)));
+
                     String key = String.format("%s %s", w1, w2);
-                    CompositeKey compositeKey = new CompositeKey(key, feat);
+                    CompositeKey compositeKey = new CompositeKey(key, feat, isRelated);
                     context.write(compositeKey,
                             new Text(String.format("%s %s %s %s %s %s", feat, lex, assoc_freq, assoc_prob, assoc_PMI, assoc_t_test)));
-
                 }
-            
              }
+        }
 
-                // about us-pobj   _ _ _ _
-                // in Golden
-                // about in
-                // about else
-                // what about
-                // about {0 in True}
-                // in {1 about True}
+        @Override
+        protected void cleanup(Context context) throws IOException, InterruptedException {
+            multipleOutputs.close();
         }
     }
 
 
     public static class ReducerClass extends Reducer<CompositeKey, Text, Text, Text> {
+        private MultipleOutputs<Text, Text> multipleOutputs;
+        private PrintWriter arffWriter;  // Add the missing field declaration
+
+        @Override
+        protected void setup(Context context) throws IOException {
+            multipleOutputs = new MultipleOutputs<>(context);
+        }
+
         public final String[] ZEROS = {"_","_","0=0","0=0","0=0","0=0"};
 
         public double[] distManhattan = new double[4];
@@ -175,12 +198,12 @@ public class Step4 {
          * assoc_t_test
          */
 
-
         @Override
         public void reduce(CompositeKey compKey, Iterable<Text> values, Context context) throws IOException, InterruptedException {
             // Split the key into words
             String key = compKey.getOriginalKey();
-            String[] words = key.toString().split("\\s+");
+            String isRelated = compKey.getIsRelated();
+            String[] words = key.split("\\s+");
             if (words.length != 2) {
                 return; // Invalid key format, skip processing
             }
@@ -191,6 +214,7 @@ public class Step4 {
             String[] lastVal = null;
 
             for (Text val : values) {
+                multipleOutputs.write("debugOutput", new Text(String.format("[DEBUG] reducer key: %s %s %s", w1,w2, isRelated)), new Text("val: " + val.toString()));
                 String[] parts = val.toString().split("\\s+");
                 if (parts.length != 6) {
                     continue;
@@ -231,6 +255,8 @@ public class Step4 {
             // Final calculations
             double[][] diffMetrix = new double[4][6];
 
+            // CHECK DIVISION BY ZERO ?
+
             for (int i = 0; i < 4; i++) {
                 diffMetrix[i][0] = distManhattan[i];
                 diffMetrix[i][1] = Math.sqrt(distEuclidean[i]);
@@ -240,11 +266,18 @@ public class Step4 {
                 diffMetrix[i][5] = simJS[i][0] + simJS[i][1];
             }
 
-            context.write(new Text(String.format("%s %s", w1,w2)), new Text(Arrays.deepToString(diffMetrix)));
+            double[] flattenDiffMatrix = Arrays.stream(diffMetrix)
+                                                .flatMapToDouble(Arrays::stream)
+                                                .toArray();
+
+            // context.write(new Text(String.format("%s %s %s", w1, w2, isRelated)), new Text(Arrays.deepToString(diffMetrix)));
+            context.write(new Text(String.format("%s %s %s", w2, w1, isRelated)), new Text(Arrays.toString(flattenDiffMatrix)));
+
             cleanDiffMatrix();
+
         }
 
-        private void calculateDiff(String[] l1,String[] l2){
+        private void calculateDiff(String[] l1,String[] l2) throws IOException, InterruptedException {
             if (l1.length != l2.length){
                 return;
             }
@@ -256,7 +289,11 @@ public class Step4 {
                 
                 handleDistManhattan(i-2, val1, val2);
                 handleDistEuclidean(i-2, val1, val2);
-                handleSimCosine(i-2, val1, val2);
+                try {
+                    handleSimCosine(i-2, val1, val2);
+                } catch (IOException | InterruptedException e) {
+                    multipleOutputs.write("debugOutput", new Text("ERROR"), new Text(String.format("SimCosine val1:%s val2:%s", val1,val2)));
+                }
                 handleSimJaccard(i-2, val1, val2);
                 handleSimDice(i-2, val1, val2);
                 handleSimJS(i-2, val1, val2);
@@ -271,7 +308,7 @@ public class Step4 {
             distEuclidean[i] += Math.pow((val1 + val2), 2);
         }
 
-        private void handleSimCosine(int i, double val1, double val2){
+        private void handleSimCosine(int i, double val1, double val2) throws IOException, InterruptedException {
             simCosine[i][0] += (val1 * val2);
             simCosine[i][1] += Math.pow(val1, 2);
             simCosine[i][2] += Math.pow(val2, 2);
@@ -314,6 +351,11 @@ public class Step4 {
                 Arrays.fill(simJaccard[i], 0);
                 Arrays.fill(simJS[i], 0);
             }
+        }
+
+        @Override
+        protected void cleanup(Context context) throws IOException, InterruptedException {
+            multipleOutputs.close();
         }
     }
 
@@ -383,6 +425,8 @@ public class Step4 {
         FileInputFormat.addInputPath(job, new Path("s3://" + jarBucketName + "/step3_output/"));
 
         FileOutputFormat.setOutputPath(job, new Path("s3://" + jarBucketName + "/step4_output/"));
+
+        MultipleOutputs.addNamedOutput(job, "debugOutput", TextOutputFormat.class, Text.class, Text.class);
 
         boolean success = job.waitForCompletion(true);
         System.exit(success ? 0 : 1);

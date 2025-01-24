@@ -33,9 +33,6 @@ public class Step3 {
             String f_or_l = fields[3];  // l=%s or f=%s
 
             context.write(new Text(String.format("%s %s", w1, w2)) ,new Text(String.format("%s %s", lf, f_or_l)));
-
-
-
         }
     }
 

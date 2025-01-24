@@ -20,10 +20,10 @@ public class Step2 {
         private final String NULL_CHARACTER = "\u0000";
 
         @Override
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields = value.toString().split("\\s+");
+        public void map(LongWritable lineId, Text line, Context context) throws IOException, InterruptedException {
+            String[] fields = line.toString().split("\\s+");
             if (fields.length < 3){
-                throw new RuntimeException("Error for value: " + value);
+                throw new RuntimeException("Error for value: " + line);
             }
             String type = fields[0];
             if (fields[0].equals("lf") && fields.length > 3){
