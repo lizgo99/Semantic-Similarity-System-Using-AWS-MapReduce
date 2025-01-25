@@ -15,12 +15,18 @@ public class App {
     public static AmazonEC2 ec2;
     public static AmazonElasticMapReduce emr;
 
-    public static int numberOfInstances = 3;
+    public static int numberOfInstances = 8;
 
     public static String jarBucketName = "classifierinfo1";
+    public static String jarFolderName = "/jars/";
 
-    public static String folderName = "/jars/";
+    public static String dataBucketName = "biarcs-dataset";
+//     public static String inputDataFolder = "/data1/";
+    public static String inputDataFolder = "/data10/";
+//     public static String inputDataFolder = "/data/";
 
+    public static String goldStandardFileName = "/word-relatedness.txt";
+//     public static String goldStandardFileName = "/test_gold_standard.txt";
 
 
     public static void main(String[] args) {
@@ -38,13 +44,15 @@ public class App {
                 .withCredentials(credentialsProvider)
                 .withRegion("us-east-1")
                 .build();
-        System.out.println("list cluster");
-        System.out.println(emr.listClusters());
 
         // Step 1
         HadoopJarStepConfig step1 = new HadoopJarStepConfig()
-                .withJar("s3://" + jarBucketName + folderName + "Step1.jar")
-                .withMainClass("Step1");
+                .withJar("s3://" + jarBucketName + jarFolderName + "Step1.jar")
+                .withMainClass("Step1")
+                .withArgs(jarBucketName, 
+                        "s3://" + dataBucketName + inputDataFolder,
+                        // "s3://" + jarBucketName + "/input-samples/",
+                        "s3://" + jarBucketName + "/step1_output/");
 
         StepConfig stepConfig1 = new StepConfig()
                 .withName("Step1")
@@ -53,8 +61,11 @@ public class App {
 
         // Step 2
         HadoopJarStepConfig step2 = new HadoopJarStepConfig()
-                .withJar("s3://" + jarBucketName + folderName + "Step2.jar")
-                .withMainClass("Step2");
+                .withJar("s3://" + jarBucketName + jarFolderName + "Step2.jar")
+                .withMainClass("Step2")
+                .withArgs(jarBucketName, 
+                        "s3://" + jarBucketName + "/step1_output/",
+                        "s3://" + jarBucketName + "/step2_output/");
 
         StepConfig stepConfig2 = new StepConfig()
                 .withName("Step2")
@@ -63,8 +74,11 @@ public class App {
 
         // Step 3
         HadoopJarStepConfig step3 = new HadoopJarStepConfig()
-                .withJar("s3://" + jarBucketName + folderName + "Step3.jar")
-                .withMainClass("Step3");
+                .withJar("s3://" + jarBucketName + jarFolderName + "Step3.jar")
+                .withMainClass("Step3")
+                .withArgs(jarBucketName, 
+                        "s3://" + jarBucketName + "/step2_output/",
+                        "s3://" + jarBucketName + "/step3_output/");
 
         StepConfig stepConfig3 = new StepConfig()
                 .withName("Step3")
@@ -73,8 +87,12 @@ public class App {
 
         // Step 4
         HadoopJarStepConfig step4 = new HadoopJarStepConfig()
-                .withJar("s3://" + jarBucketName + folderName + "Step4.jar")
-                .withMainClass("Step4");
+                .withJar("s3://" + jarBucketName + jarFolderName + "Step4.jar")
+                .withMainClass("Step4")
+                .withArgs(jarBucketName, 
+                        "s3://" + jarBucketName + "/step3_output/",
+                        "s3://" + jarBucketName + "/step4_output/",
+                        "s3://" + jarBucketName + goldStandardFileName);
 
         StepConfig stepConfig4 = new StepConfig()
                 .withName("Step4")
@@ -83,14 +101,15 @@ public class App {
 
         // Step 5
         HadoopJarStepConfig step5 = new HadoopJarStepConfig()
-                .withJar("s3://" + jarBucketName + folderName + "WekaModelStep.jar")
-                .withMainClass("WekaModelStep")
+                .withJar("s3://" + jarBucketName + jarFolderName + "Step5.jar")
+                .withMainClass("Step5")
                 .withArgs(jarBucketName, 
-                        "step4_output/",
-                        "step5_output/");
+                        "step4_output/", // no need for full path here
+                        "step5_output/"); 
+                
         
         StepConfig stepConfig5 = new StepConfig()
-                .withName("WekaModelStep")
+                .withName("Step5")
                 .withHadoopJarStep(step5)
                 .withActionOnFailure("TERMINATE_JOB_FLOW");
 
@@ -109,9 +128,9 @@ public class App {
         RunJobFlowRequest runFlowRequest = new RunJobFlowRequest()
                 .withName("Map reduce project")
                 .withInstances(instances)
-        //        .withSteps(stepConfig1, stepConfig2, stepConfig3, stepConfig4)
+               .withSteps(stepConfig1, stepConfig2, stepConfig3, stepConfig4, stepConfig5)
                 // .withSteps(stepConfig4)
-                .withSteps(stepConfig5)
+                // .withSteps(stepConfig5)
                 .withLogUri("s3://" + jarBucketName + "/logs/")
                 .withServiceRole("EMR_DefaultRole")
                 .withJobFlowRole("EMR_EC2_DefaultRole")

@@ -10,7 +10,6 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 
 import java.io.*;
@@ -82,9 +81,10 @@ public class Step4 {
         protected void setup(Context context) throws IOException, InterruptedException {
             multipleOutputs = new MultipleOutputs<>(context);
 
-            String jarBucketName = "classifierinfo1";
-//            String s3InputPath = "s3a://" + jarBucketName + "/word-relatedness.txt";
-            String s3InputPath = "s3a://" + jarBucketName + "/test_gold_standard.txt";
+            Configuration conf = context.getConfiguration();
+            String s3InputPath = conf.get("goldStandardPath");
+            
+            // String s3InputPath = "s3a://" + jarBucketName + "/test_gold_standard.txt";
 
             // Configure the FileSystem
             FileSystem fs = FileSystem.get(URI.create(s3InputPath), new Configuration());
@@ -115,12 +115,12 @@ public class Step4 {
             }
         }
 
-         /**
-          * Helper method to add word relationships to the GoldenStandard map.
-          */
-         private void addToGoldenStandard(String key, String value) {
-             GoldenStandard.computeIfAbsent(key, k -> new HashSet<>()).add(value);
-         }
+        /**
+         * Helper method to add word relationships to the GoldenStandard map.
+        */
+        private void addToGoldenStandard(String key, String value) {
+            GoldenStandard.computeIfAbsent(key, k -> new HashSet<>()).add(value);
+        }
 
 
 
@@ -173,7 +173,6 @@ public class Step4 {
 
     public static class ReducerClass extends Reducer<CompositeKey, Text, Text, Text> {
         private MultipleOutputs<Text, Text> multipleOutputs;
-        private PrintWriter arffWriter;  // Add the missing field declaration
 
         @Override
         protected void setup(Context context) throws IOException {
@@ -391,19 +390,21 @@ public class Step4 {
             return key1.getOriginalKey().compareTo(key2.getOriginalKey());
         }
     }
-    
-
 
     public static void main(String[] args) throws Exception {
         System.out.println("[DEBUG] STEP 4 started!");
 
-        String jarBucketName = "classifierinfo1";
+        // String jarBucketName = "classifierinfo1";
+
+        String jarBucketName = args[1];
+        String inputPath = args[2];
+        String outputPath = args[3];
+        String goldStandardPath = args[4];
 
         Configuration conf = new Configuration();
+        conf.set("goldStandardPath", goldStandardPath);
 
         Job job = Job.getInstance(conf, "Step4");
-
-//        job.getConfiguration().setLong("mapreduce.input.fileinputformat.split.maxsize", 64 * 1024 * 1024); // 64MB (default is 128MB)
 
         job.setJarByClass(Step4.class);
         job.setMapperClass(MapperClass.class);
@@ -422,9 +423,10 @@ public class Step4 {
         job.setOutputFormatClass(TextOutputFormat.class);
 
         job.setInputFormatClass(TextInputFormat.class);
-        FileInputFormat.addInputPath(job, new Path("s3://" + jarBucketName + "/step3_output/"));
+        
+        FileInputFormat.addInputPath(job, new Path(inputPath + "part-r*"));
 
-        FileOutputFormat.setOutputPath(job, new Path("s3://" + jarBucketName + "/step4_output/"));
+        FileOutputFormat.setOutputPath(job, new Path(outputPath));
 
         MultipleOutputs.addNamedOutput(job, "debugOutput", TextOutputFormat.class, Text.class, Text.class);
 

@@ -251,9 +251,9 @@
                             <finalName>Step4</finalName>
                         </configuration>
                     </execution>
-                    <!-- Execution for WekaModelStep.jar -->
+                    <!-- Execution for Step5.jar -->
                     <execution>
-                        <id>weka-model-step-jar</id>
+                        <id>step5-jar</id>
                         <phase>package</phase>
                         <goals>
                             <goal>shade</goal>
@@ -273,10 +273,10 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>WekaModelStep</mainClass>
+                                    <mainClass>Step5</mainClass>    
                                 </transformer>
                             </transformers>
-                            <finalName>WekaModelStep</finalName>
+                            <finalName>Step5</finalName>
                         </configuration>
                     </execution>
                 </executions>
