@@ -49,21 +49,9 @@ public class Step1 {
             // Replace each word with it's stemmed version
             for (int i = 0; i < words.length; i++) {
                 String word = words[i];
-                Stemmer stemmer = new Stemmer();
                 String oldWord = word.substring(0, word.indexOf("/"));
-                boolean fullyStemmed = true;
-                for (char c : oldWord.toCharArray()) {
-                    if (Character.isLetter(c)) {
-                        stemmer.add(c);
-                    } else {
-                        fullyStemmed = false;
-                        break;
-                    }
-                }
-                if (fullyStemmed) {
-                    stemmer.stem();
-                    words[i] = word.replace(oldWord, stemmer.toString());
-                }
+                String newWord = Stemmer.stemWord(oldWord);
+                words[i] = word.replace(oldWord, newWord);
                 parts[i] = words[i].split("/");
             }
 

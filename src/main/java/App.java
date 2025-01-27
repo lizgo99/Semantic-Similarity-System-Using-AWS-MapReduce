@@ -21,8 +21,8 @@ public class App {
     public static String jarFolderName = "/jars/";
 
     public static String dataBucketName = "biarcs-dataset";
-//     public static String inputDataFolder = "/data1/";
-    public static String inputDataFolder = "/data10/";
+     public static String inputDataFolder = "/data1/";
+//    public static String inputDataFolder = "/data10/";
 //     public static String inputDataFolder = "/data/";
 
     public static String goldStandardFileName = "/word-relatedness.txt";
@@ -106,13 +106,11 @@ public class App {
                 .withArgs(jarBucketName, 
                         "step4_output/", // no need for full path here
                         "step5_output/"); 
-                
-        
+
         StepConfig stepConfig5 = new StepConfig()
                 .withName("Step5")
                 .withHadoopJarStep(step5)
                 .withActionOnFailure("TERMINATE_JOB_FLOW");
-
 
         // Job flow
         JobFlowInstancesConfig instances = new JobFlowInstancesConfig()
@@ -128,7 +126,7 @@ public class App {
         RunJobFlowRequest runFlowRequest = new RunJobFlowRequest()
                 .withName("Map reduce project")
                 .withInstances(instances)
-               .withSteps(stepConfig1, stepConfig2, stepConfig3, stepConfig4, stepConfig5)
+                .withSteps(stepConfig3, stepConfig4)
                 // .withSteps(stepConfig4)
                 // .withSteps(stepConfig5)
                 .withLogUri("s3://" + jarBucketName + "/logs/")

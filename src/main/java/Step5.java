@@ -64,7 +64,7 @@ public class Step5 {
         System.out.println("[DEBUG] Writing ARFF to: " + arffFile);
         try (BufferedWriter arffWriter = new BufferedWriter(new FileWriter(arffFile))) {
 
-            String[] features = { "freq_distManhattan", "freq_distEuclidean", "freq_simCosine", "freq_simJaccard",
+            String[] attributes = { "freq_distManhattan", "freq_distEuclidean", "freq_simCosine", "freq_simJaccard",
                 "freq_simDice", "freq_simJS",
                 "prob_distManhattan", "prob_distEuclidean", "prob_simCosine", "prob_simJaccard", "prob_simDice",
                 "prob_simJS",
@@ -75,8 +75,8 @@ public class Step5 {
             System.out.println("[DEBUG] Starting writing ARFF");
             arffWriter.write("@relation semantic_similarity\n");
 
-            for (String feature : features) {
-                arffWriter.write("@attribute " + feature + " numeric\n");
+            for (String attribute : attributes) {
+                arffWriter.write("@attribute " + attribute + " numeric\n");
             }
             arffWriter.write("@attribute class {similar, not-similar}\n");
             arffWriter.write("@data\n");
@@ -85,7 +85,6 @@ public class Step5 {
                 S3Object s3Object = s3Client.getObject(bucketName, key);
                 try (S3ObjectInputStream s3ObjectInputStream = s3Object.getObjectContent();
                     BufferedReader br = new BufferedReader(new InputStreamReader(s3ObjectInputStream))) {
-
                     String line;
                     while ((line = br.readLine()) != null) {
                         processLine(line, arffWriter);
@@ -100,6 +99,7 @@ public class Step5 {
         Instances data;
         try{
             System.out.println("[DEBUG] Reading ARFF: " + arffFile.getAbsolutePath());
+
             data = DataSource.read(arffFile.getAbsolutePath());
             data.setClassIndex(data.numAttributes() - 1);
 
@@ -132,57 +132,74 @@ public class Step5 {
                     "NaiveBayes"
             };
 
-            System.out.println("\n=== Cross-Validation: Compare Classifiers ===\n");
-            
-            // Determine appropriate number of folds (minimum of 10 and dataset size)
-            int numFolds = Math.min(10, data.numInstances());
-            if (numFolds < 2) {
-                throw new IllegalStateException("Dataset must have at least 2 instances for cross-validation");
-            }
-            
-            // By default, let's treat "similar" as the positive class
-            int trueIndex = data.classAttribute().indexOfValue("similar");
-            if (trueIndex < 0) {
-                System.err.println("[WARNING] The 'similar' class value wasn't found. Check ARFF class definition!");
+            File outputFile = new File("/tmp/step5_output.txt");
+            System.out.println("[DEBUG] Writing output to: " + outputFile);
+            try (BufferedWriter outputWriter = new BufferedWriter(new FileWriter(outputFile))) {
+
+                outputWriter.write("\n=== Cross-Validation: Compare Classifiers ===\n");
+
+                // Determine appropriate number of folds (minimum of 10 and dataset size)
+                int numFolds = Math.min(10, data.numInstances());
+                if (numFolds < 2) {
+                    throw new IllegalStateException("Dataset must have at least 2 instances for cross-validation");
+                }
+
+                // By default, let's treat "similar" as the positive class
+                int trueIndex = data.classAttribute().indexOfValue("similar");
+                if (trueIndex < 0) {
+                    System.err.println("[WARNING] The 'similar' class value wasn't found. Check ARFF class definition!");
+                }
+
+                for (int i = 0; i < classifiers.length; i++) {
+                    Classifier cls = classifiers[i];
+                    String name = classifierNames[i];
+
+                    try {
+                        Evaluation eval = new Evaluation(data);
+                        // Use dynamic number of folds
+                        eval.crossValidateModel(cls, data, numFolds, new Random(42));
+
+                        outputWriter.write("=== " + name + " ===");
+                        outputWriter.write("Using " + numFolds + "-fold cross-validation");
+
+                        // Basic summary
+                        outputWriter.write(eval.toSummaryString());
+
+                        // Precision, Recall, F1 specifically for the “similar” class
+                        if (trueIndex >= 0) {
+                            double precision = eval.precision(trueIndex);
+                            double recall = eval.recall(trueIndex);
+                            double f1 = eval.fMeasure(trueIndex);
+
+                            outputWriter.write("Precision (similar): " + String.format("%.4f", precision));
+                            outputWriter.write("Recall    (similar): " + String.format("%.4f", recall));
+                            outputWriter.write("F1        (similar): " + String.format("%.4f", f1));
+                        }
+
+                        // Optional: detailed stats, confusion matrix
+                        outputWriter.write(eval.toClassDetailsString());
+                        outputWriter.write(eval.toMatrixString());
+                    } catch (Exception e) {
+                        System.out.println("[ERROR] " + e.getMessage());
+                        e.printStackTrace();
+                    }
+
+                    outputWriter.write("--------------------------------------------------\n");
+                }
+
+                outputWriter.write("[INFO] Done! Evaluated all classifiers with cross-validation.\n");
+
+            } catch (Exception e) {
+                System.out.println("[ERROR] " + e.getMessage());
+                e.printStackTrace();
             }
 
-            for (int i = 0; i < classifiers.length; i++) {
-                Classifier cls = classifiers[i];
-                String name = classifierNames[i];
-    
-                try {
-                    Evaluation eval = new Evaluation(data);
-                    // Use dynamic number of folds
-                    eval.crossValidateModel(cls, data, numFolds, new Random(42));
-    
-                    System.out.println("=== " + name + " ===");
-                    System.out.println("Using " + numFolds + "-fold cross-validation");
-    
-                    // Basic summary
-                    System.out.println(eval.toSummaryString());
-    
-                    // Precision, Recall, F1 specifically for the “similar” class  
-                    if (trueIndex >= 0) {
-                        double precision = eval.precision(trueIndex);
-                        double recall    = eval.recall(trueIndex);
-                        double f1        = eval.fMeasure(trueIndex);
-    
-                        System.out.println("Precision (similar): " + String.format("%.4f", precision));
-                        System.out.println("Recall    (similar): " + String.format("%.4f", recall));
-                        System.out.println("F1        (similar): " + String.format("%.4f", f1));
-                    }
-    
-                    // Optional: detailed stats, confusion matrix
-                    System.out.println(eval.toClassDetailsString());
-                    System.out.println(eval.toMatrixString());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                System.out.println("--------------------------------------------------\n");
-            }
-    
-            System.out.println("[INFO] Done! Evaluated all classifiers with cross-validation.\n");
-            
+            String outputFileKey = s3OutputFolder + "step5_output.txt";
+            s3Client.putObject(bucketName, outputFileKey, outputFile);
+
+            System.out.println("[DEBUG] output file uploaded to s3://"
+                    + bucketName + "/" + outputFileKey);
+
         }catch(Exception e){
             System.out.println("[ERROR] " + e.getMessage());
             e.printStackTrace();

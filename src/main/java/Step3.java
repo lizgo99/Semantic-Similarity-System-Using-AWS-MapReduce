@@ -80,10 +80,10 @@ public class Step3 {
                 double assoc_t_test = ((lf / L) - (l / L * f / F)) / (Math.sqrt(l / L * f / F));
 
                 context.write(key,
-                        new Text(String.format("assoc_freq=%.3f assoc_prob=%.3f assoc_PMI=%.3f assoc_t_test=%.3f",
+                        new Text(String.format("assoc_freq=%s assoc_prob=%s assoc_PMI=%s assoc_t_test=%s",
                                 assoc_freq, assoc_prob, assoc_PMI, assoc_t_test)));
             } else {
-                context.write(key, new Text(String.format("Error! l=%.3f f=%.3f lf=%.3f", l, f, lf)));
+                context.write(key, new Text(String.format("Error! l=%s f=%s lf=%s", l, f, lf)));
             }
         }
     }

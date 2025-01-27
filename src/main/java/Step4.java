@@ -18,7 +18,6 @@ import java.util.*;
 
 public class Step4 {
 
-
     public static class CompositeKey implements WritableComparable<CompositeKey> {
         private String originalKey;
         private String feature;
@@ -106,11 +105,13 @@ public class Step4 {
                     String word2 = parts[1];
                     String isRelated = parts[2];
 
-                    // ADD STEMMING
+                    // Stemming
+                    String word1Stemmed = Stemmer.stemWord(word1);
+                    String word2Stemmed = Stemmer.stemWord(word2);
 
                     // Add words to the GoldenStandard map
-                    addToGoldenStandard(word1, word2 + " 1 " + isRelated);
-                    addToGoldenStandard(word2, word1 + " 0 " + isRelated);
+                    addToGoldenStandard(word1Stemmed, word2Stemmed + " 1 " + isRelated);
+                    addToGoldenStandard(word2Stemmed, word1Stemmed + " 0 " + isRelated);
                 }
             }
         }
@@ -154,7 +155,7 @@ public class Step4 {
                         w1 = lex;
                         w2 = wordToPos[0];
                     }
-                    multipleOutputs.write("debugOutput", new Text(String.format("[DEBUG] mapper key: %s %s", w1,w2)), new Text(String.format("pos:%s isRelated:%s", pos, isRelated)));
+//                    multipleOutputs.write("debugOutput", new Text(String.format("[DEBUG] mapper key: %s %s", w1,w2)), new Text(String.format("pos:%s isRelated:%s", pos, isRelated)));
 
                     String key = String.format("%s %s", w1, w2);
                     CompositeKey compositeKey = new CompositeKey(key, feat, isRelated);
@@ -189,7 +190,7 @@ public class Step4 {
         public double[][] simJS = new double[4][2];
 
 
-        /**
+        /** DIFF-MATRIX:
          *              distManhattan   distEuclidean   simCosine   simJaccard  simDice  simJS
          * assoc_freq
          * assoc_prob
@@ -213,7 +214,7 @@ public class Step4 {
             String[] lastVal = null;
 
             for (Text val : values) {
-                multipleOutputs.write("debugOutput", new Text(String.format("[DEBUG] reducer key: %s %s %s", w1,w2, isRelated)), new Text("val: " + val.toString()));
+//                multipleOutputs.write("debugOutput", new Text(String.format("[DEBUG] reducer key: %s %s %s", w1,w2, isRelated)), new Text("val: " + val.toString()));
                 String[] parts = val.toString().split("\\s+");
                 if (parts.length != 6) {
                     continue;
@@ -259,9 +260,12 @@ public class Step4 {
             for (int i = 0; i < 4; i++) {
                 diffMetrix[i][0] = distManhattan[i];
                 diffMetrix[i][1] = Math.sqrt(distEuclidean[i]);
-                diffMetrix[i][2] = simCosine[i][0] / (Math.sqrt(simCosine[i][1]) * Math.sqrt(simCosine[i][2]));
-                diffMetrix[i][3] = simJaccard[i][0] / simJaccard[i][1];
-                diffMetrix[i][4] = 2 * simDice[i][0] / simDice[i][1];
+                diffMetrix[i][2] = simCosine[i][1] != 0 && simCosine[i][2] != 0 ?
+                        simCosine[i][0] / (Math.sqrt(simCosine[i][1]) * Math.sqrt(simCosine[i][2])) : Double.NaN;
+                diffMetrix[i][3] = simJaccard[i][1] != 0 ?
+                        simJaccard[i][0] / simJaccard[i][1] : Double.NaN;
+                diffMetrix[i][4] = simDice[i][1] != 0 ?
+                        2 * simDice[i][0] / simDice[i][1] : Double.NaN;
                 diffMetrix[i][5] = simJS[i][0] + simJS[i][1];
             }
 
@@ -291,7 +295,8 @@ public class Step4 {
                 try {
                     handleSimCosine(i-2, val1, val2);
                 } catch (IOException | InterruptedException e) {
-                    multipleOutputs.write("debugOutput", new Text("ERROR"), new Text(String.format("SimCosine val1:%s val2:%s", val1,val2)));
+                    continue;
+//                    multipleOutputs.write("debugOutput", new Text("ERROR"), new Text(String.format("SimCosine val1:%s val2:%s", val1,val2)));
                 }
                 handleSimJaccard(i-2, val1, val2);
                 handleSimDice(i-2, val1, val2);
@@ -304,13 +309,13 @@ public class Step4 {
         }
 
         private void handleDistEuclidean(int i, double val1, double val2){
-            distEuclidean[i] += Math.pow((val1 + val2), 2);
+            distEuclidean[i] += (val1 + val2) * (val1 + val2);
         }
 
         private void handleSimCosine(int i, double val1, double val2) throws IOException, InterruptedException {
             simCosine[i][0] += (val1 * val2);
-            simCosine[i][1] += Math.pow(val1, 2);
-            simCosine[i][2] += Math.pow(val2, 2);
+            simCosine[i][1] += val1 * val1;
+            simCosine[i][2] += val2 * val2;
         }
 
         private void handleSimJaccard(int i, double val1, double val2){
@@ -335,9 +340,9 @@ public class Step4 {
                 return;
             }
             // When val1 is 0, its contribution to KL divergence is 0
-            simJS[i][0] = (val1 > 0) ? val1 * Math.log(val1 / mean) : 0;
+            simJS[i][0] += (val1 > 0) ? val1 * Math.log(val1 / mean) : 0;
             // When val2 is 0, its contribution to KL divergence is 0
-            simJS[i][1] = (val2 > 0) ? val2 * Math.log(val2 / mean) : 0;
+            simJS[i][1] += (val2 > 0) ? val2 * Math.log(val2 / mean) : 0;
         }
         
         private void cleanDiffMatrix() {
@@ -428,7 +433,7 @@ public class Step4 {
 
         FileOutputFormat.setOutputPath(job, new Path(outputPath));
 
-        MultipleOutputs.addNamedOutput(job, "debugOutput", TextOutputFormat.class, Text.class, Text.class);
+//        MultipleOutputs.addNamedOutput(job, "debugOutput", TextOutputFormat.class, Text.class, Text.class);
 
         boolean success = job.waitForCompletion(true);
         System.exit(success ? 0 : 1);
