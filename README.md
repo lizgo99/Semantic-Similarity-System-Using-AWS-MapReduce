@@ -1,67 +1,124 @@
-# System Design for Semantic Similarity Using Map-Reduce
+# README: Semantic Similarity System Using MapReduce
 by Liz Gokhvat [username: lizgo , id: 208005777] , Ido Toker [username: idoto , id: 207942186]
-
 ## Overview
-This system is designed to process a large corpus (Google Syntactic N-grams dataset) to compute semantic similarity between word pairs, build a classifier, and evaluate the performance of that classifier using 10-fold cross validation. The workflow utilizes the MapReduce framework for scalability and efficiency, ensuring robust and distributed processing of massive datasets. 
 
+This system processes a large corpus, the Google Syntactic N-grams dataset, to compute semantic similarity between word pairs. It leverages the MapReduce framework for efficient and scalable processing, and the Random Forest classifier is used for classification tasks. The system's performance is evaluated through 10-fold cross-validation.
 
-RandomForest was selected as it consistently delivered the best results, demonstrating high precision and recall during evaluation across diverse configurations.
-
-## Step Descriptions
+## Steps Overview
 
 ### Step 1: Initial Processing and Count Calculation
 
-Input: Google Syntactic N-grams dataset in the format: head_word<TAB>syntactic-ngram<TAB>total_count<TAB>counts_by_year.
+- **Objective:** Process the raw Syntactic N-grams data to compute counts for individual lexemes ('l'), features ('f'), and lexeme-feature pairs ('lf').
 
-Output: Stemmed and tokenized n-grams with extracted lexeme-feature pairs.
+- **Input:** Google Syntactic N-grams dataset (`head_word<TAB>syntactic-ngram<TAB>total_count<TAB>counts_by_year`)
 
-Map
+- **Output:** Consolidated counts in the format: `{key: l lexeme value: count}` or `{key: f feature value: count}` or `{key: lf lexeme feature value: count}`
 
-Input Key: The line number (LongWritable)
+1. Mapper parses each line from the input data.
+2. Emits counts for lexemes, features, and lexeme-feature pairs.
+3. Reducer aggregates counts.
 
-Input Value: A single line of text containing [head_word, syntactic-ngram, total_count, counts_by_year]
+**Communication:**
 
-Mapper Output Key: Text, prefixed by one of l, f, or lf along with the relevant string (word, feature, or combined)
+| Dataset Run      | Metric                      | With Local Aggregation            | Without Local Aggregation           |
+| ---------------- | --------------------------- | --------------------------------- | ----------------------------------- |
+| **10% Dataset**  | Key-Value Pairs to Reducers | ###                               | ###                                 |
+|                  | Size of Data to Reducers    | ###                               | ###                                 |
+| **100% Dataset** | Key-Value Pairs to Reducers | 1,007,362,369                     | 13,544,891,232                      |
+|                  | Size of Data to Reducers    | 12,811,842,610 bytes (\~12.81 GB) | 218,364,691,355 bytes (\~218.36 GB) |
 
-Mapper Output Value: Text containing the count
+### Step 2: Data Organization
 
-Reduce
+- **Objective:** Combine counts for lexemes, features , and lexeme-feature pairs  to generate enriched data linking lexemes and features.
 
-Input Key: Text of format l <lex>, f <feature>, or lf <lex> <feature>
+- **Input:** Aggregated counts from Step 1 : '{key: l lexeme value: count}' or '{key: f feature value: count}' or '{key: lf lexeme feature value: count}'
 
-Input Value: The list of string counts
+- **Output:** Consolidated counts with enriched context in the format `{key: lexeme feature value: lf=_ l=_}` or '{key: lexeme feature value: lf=\_ f=\_}'
 
-Reducer Output Key: The same Text key
+1. Mapper reads and parses counts and emits key-value pairs linking lexemes-features pairs to some of the values (lf & l or lf & f).
+2. Reducer consolidates counts and contexts for further processing.
 
-Reducer Output Value: The sum of the counts
+**Communication:**
 
-### Step 2: Joining Lexemes and Features
+| Dataset Run      | Metric                      | With Local Aggregation | Without Local Aggregation       |
+| ---------------- | --------------------------- | ---------------------- | ------------------------------- |
+| **10% Dataset**  | Key-Value Pairs to Reducers | combiner not used      | ###                             |
+|                  | Size of Data to Reducers    | combiner not used      | ###                             |
+| **100% Dataset** | Key-Value Pairs to Reducers | combiner not used      | 228,386,555                     |
+|                  | Size of Data to Reducers    | combiner not used      | 8,283,378,219 bytes (\~8.28 GB) |
 
 ### Step 3: Computing Association Measures
 
-### Step 4: Constructing Feature Vectors
+- **Objective:** Calculate statistical association measures for lexeme-feature pairs, such as frequency, probability, PMI, and t-test scores.
+
+- **Input:** Key-value pairs from Step 2 : '{key: lexeme feature value: lf=\_ l=\_}' or '{key: lexeme feature value: lf=\_ f=\_}'
+
+- **Output:** Association measures in the format `{key: lexeme-feature pair value: assoc`*`freq=_ `*`assoc`*`prob=_ `*`assoc`*`PMI=_ `*`assoc_t_test=_}`
+
+1. Mapper emits key-value pairs for word pairs with partial association data.
+2. Reducer consolidates, computes and aggregates association metrics.
+
+**Communication:**
+
+| Dataset Run      | Metric                      | With Local Aggregation | Without Local Aggregation       |
+| ---------------- | --------------------------- | ---------------------- | ------------------------------- |
+| **10% Dataset**  | Key-Value Pairs to Reducers | combiner not used      | ###                             |
+|                  | Size of Data to Reducers    | combiner not used      | ###                             |
+| **100% Dataset** | Key-Value Pairs to Reducers | combiner not used      | 221,261,966                     |
+|                  | Size of Data to Reducers    | combiner not used      | 7,527,917,604 bytes (\~7.01 GB) |
+
+### Step 4: Constructing Distance Vectors For Classification
+
+- **Objective:** Transform association measures into feature vectors annotated with relatedness labels (`similar` or `not-similar`) for the classification.
+
+- **Input:** Association measures from Step 3 : '{key: lexeme-feature pair value: assocfreq=\_ assocprob=\_ assocPMI=\_ assoc\_t\_test=\_}' and a gold standard dataset.
+
+- **Output:** Annotated feature vectors in the format `{key: lexeme-feature pair, relatedness value: vector data}`
+
+1. Mapper  emits the association measures of the lexeme-feature pairs that are in the golden standard.
+2. Reducer computes a 4x6 matrix containing all the possible association measures  and vector-similarities combinations possible and emits it as a vector for the classifier.
+
+**Communication:**
+
+| Dataset Run      | Metric                      | With Local Aggregation | Without Local Aggregation         |
+| ---------------- | --------------------------- | ---------------------- | --------------------------------- |
+| **10% Dataset**  | Key-Value Pairs to Reducers | combiner not used      | ###                               |
+|                  | Size of Data to Reducers    | combiner not used      | ###                               |
+| **100% Dataset** | Key-Value Pairs to Reducers | combiner not used      | 198,890,689                       |
+|                  | Size of Data to Reducers    | combiner not used      | 32,495,273,719 bytes (\~30.26 GB) |
 
 ### Step 5: Classification
 
+- **Objective:** Evaluate the performance of the Random Forest classifier on the feature vectors.
+
+- **Input:** Distance vectors from Step 4.
+
+- **Output:** Classification metrics, including precision, recall, and F1 scores.
+
+1. Train the Random Forest classifier using 10-fold cross-validation.
+2. Evaluate the classifier on the feature vectors.
+
+**Results:**
+
+| Dataset Run      | Precision | Recall | F1 Measure |
+| ---------------- | --------- | ------ | ---------- |
+| **10% Dataset**  | ###       | ###    | ###        |
+| **100% Dataset** | 0.9495    | 0.2999 | 0.4559     |
+
+The classifier demonstrates high precision but lower recall, indicating it is highly accurate in its predictions but less effective at identifying all positive instances.
 
 ## Running the Project
-1. Update the `App.java` file with your AWS credentials and S3 bucket name.
-2. Compile and Package the code:
-   ```
+
+1. Update the `App.java` file with AWS credentials and S3 bucket information.
+2. Compile and package the project:
+   ```bash
    mvn clean package
    ```
-3. Upload the compiled JARs of the steps to the S3 bucket.
-    - ensure that the location of the JARs is correct in the `App.java` file.
-    - ensure that there are no output folders under the same name as the output folders that are in the code.
-4. Execute the `Location in your files/App.jar` to launch the EMR job:
-   ```
+3. Upload JAR files for each step to the S3 bucket.
+ - ensure that the location of the JARs is correct in the App.java file.
+ - ensure that there are no output folders under the same name as the output folders that are in the code.
+4. Execute the main application JAR:
+   ```bash
    java -jar target/App.jar
    ```
 
-## Reports
-
-
-| Run                         | with local aggregation        | without local aggregation       |
-|-----------------------------|-------------------------------|---------------------------------|
-| Key-Value Pairs to Reducers | 4,145,215                     | 205,621,932                     |
-| Size of Data to Reducers    | 58,258,235 bytes (~55.55 MB)  | 4,211,126,503 bytes (~4.21 GB)  |

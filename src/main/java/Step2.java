@@ -14,7 +14,7 @@ public class Step2 {
     ///
     /// input: <key, value> key = l word or key = f feature_word-dep_label or key =
     /// lf word feature_word-dep_label, value = count
-    /// output: ?
+    /// output: <key, value> key = lex/ feature and type of info (l, f or lf), value =
     ///
     public static class MapperClass extends Mapper<LongWritable, Text, Text, Text> {
 
