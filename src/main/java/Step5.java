@@ -8,7 +8,6 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.io.*;
 
 import com.amazonaws.services.s3.model.S3ObjectInputStream;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
@@ -20,9 +19,6 @@ import com.amazonaws.services.s3.AmazonS3;
 import weka.core.converters.ConverterUtils.DataSource;
 import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
-import weka.classifiers.bayes.NaiveBayes;
-import weka.classifiers.functions.Logistic;
-import weka.classifiers.functions.SMO;
 import weka.classifiers.trees.RandomForest;
 import weka.core.Instances;
 
@@ -108,86 +104,55 @@ public class Step5 {
 
             System.out.println("[DEBUG] ARFF file uploaded to s3://" 
                                 + bucketName + "/" + resultKey);
-                                
-
-            // Create the train and test sets
-            final int numInstances = data.numInstances();
-            int trainSize = (int) Math.round(numInstances * 0.8);
-            int testSize = numInstances - trainSize;
-
-            Instances trainSet = new Instances(data, 0, trainSize);
-            Instances testSet = new Instances(data, trainSize, testSize);
-            
-            
-            Classifier[] classifiers = {
-                new RandomForest(),
-                new Logistic(),
-                new SMO(),
-                new NaiveBayes()
-            };
-            String[] classifierNames = {
-                    "RandomForest",
-                    "Logistic",
-                    "SMO (SVM)",
-                    "NaiveBayes"
-            };
 
             File outputFile = new File("/tmp/step5_output.txt");
             System.out.println("[DEBUG] Writing output to: " + outputFile);
             try (BufferedWriter outputWriter = new BufferedWriter(new FileWriter(outputFile))) {
 
-                outputWriter.write("\n=== Cross-Validation: Compare Classifiers ===\n");
-
-                // Determine appropriate number of folds (minimum of 10 and dataset size)
                 int numFolds = Math.min(10, data.numInstances());
                 if (numFolds < 2) {
-                    throw new IllegalStateException("Dataset must have at least 2 instances for cross-validation");
+                    System.err.println("Dataset must have at least 2 instances for cross-validation");
                 }
 
-                // By default, let's treat "similar" as the positive class
+                // Set "similar" as the positive class
                 int trueIndex = data.classAttribute().indexOfValue("similar");
                 if (trueIndex < 0) {
                     System.err.println("[WARNING] The 'similar' class value wasn't found. Check ARFF class definition!");
                 }
 
-                for (int i = 0; i < classifiers.length; i++) {
-                    Classifier cls = classifiers[i];
-                    String name = classifierNames[i];
+                Classifier cls = new RandomForest();
+                String name = "RandomForest";
 
-                    try {
-                        Evaluation eval = new Evaluation(data);
-                        // Use dynamic number of folds
-                        eval.crossValidateModel(cls, data, numFolds, new Random(42));
+                try {
+                    Evaluation eval = new Evaluation(data);
 
-                        outputWriter.write("=== " + name + " ===");
-                        outputWriter.write("Using " + numFolds + "-fold cross-validation");
+                    eval.crossValidateModel(cls, data, numFolds, new Random(42));
 
-                        // Basic summary
-                        outputWriter.write(eval.toSummaryString());
+                    outputWriter.write("=== " + name + " ===\n");
+                    outputWriter.write("Using " + numFolds + "-fold cross-validation\n\n");
 
-                        // Precision, Recall, F1 specifically for the “similar” class
-                        if (trueIndex >= 0) {
-                            double precision = eval.precision(trueIndex);
-                            double recall = eval.recall(trueIndex);
-                            double f1 = eval.fMeasure(trueIndex);
+                    // Basic summary
+                    outputWriter.write(eval.toSummaryString() + "\n");
 
-                            outputWriter.write("Precision (similar): " + String.format("%.4f", precision));
-                            outputWriter.write("Recall    (similar): " + String.format("%.4f", recall));
-                            outputWriter.write("F1        (similar): " + String.format("%.4f", f1));
-                        }
+                    // Precision, Recall, F1 specifically for the "similar" class
+                    if (trueIndex >= 0) {
+                        double precision = eval.precision(trueIndex);
+                        double recall = eval.recall(trueIndex);
+                        double f1 = eval.fMeasure(trueIndex);
 
-                        // Optional: detailed stats, confusion matrix
-                        outputWriter.write(eval.toClassDetailsString());
-                        outputWriter.write(eval.toMatrixString());
-                    } catch (Exception e) {
-                        System.out.println("[ERROR] " + e.getMessage());
-                        e.printStackTrace();
+                        outputWriter.write("\nPrecision (similar): " + String.format("%.4f\n", precision));
+                        outputWriter.write("Recall    (similar): " + String.format("%.4f\n", recall));
+                        outputWriter.write("F1        (similar): " + String.format("%.4f\n\n", f1));
                     }
 
-                    outputWriter.write("--------------------------------------------------\n");
+                    // detailed stats, confusion matrix
+                    outputWriter.write(eval.toClassDetailsString() + "\n");
+                    outputWriter.write(eval.toMatrixString() + "\n");
+                    
+                } catch (Exception e) {
+                    System.out.println("[ERROR] " + e.getMessage());
+                    e.printStackTrace();
                 }
-
-                outputWriter.write("[INFO] Done! Evaluated all classifiers with cross-validation.\n");
 
             } catch (Exception e) {
                 System.out.println("[ERROR] " + e.getMessage());
@@ -233,7 +198,7 @@ public class Step5 {
         String arffLine = String.format("%s,%s%n", values, isSimilar);
 
         writer.write(arffLine);
-        System.out.println(String.format("[DEBUG] %s %s %s %n", word1, word2, isSimilar));
-        System.out.println("[DEBUG] " + arffLine);
+//        System.out.println(String.format("[DEBUG] %s %s %s %n", word1, word2, isSimilar));
+//        System.out.println("[DEBUG] " + arffLine);
     }
 }

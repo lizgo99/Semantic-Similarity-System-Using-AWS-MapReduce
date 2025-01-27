@@ -135,8 +135,6 @@ public class Step3 {
         job.setJarByClass(Step3.class);
         job.setMapperClass(Step3.MapperClass.class);
         job.setReducerClass(Step3.ReducerClass.class);
-        // job.setCombinerClass(Step3.ReducerClass.class);
-        // job.setPartitionerClass(Step3.PartitionerClass.class);
 
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);

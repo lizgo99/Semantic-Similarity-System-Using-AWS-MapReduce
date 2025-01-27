@@ -8,42 +8,28 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 
 import java.io.OutputStreamWriter;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.net.URI;
-import java.util.Arrays;
 
 public class Step1 {
     public static class MapperClass extends Mapper<LongWritable, Text, Text, Text> {
-        private MultipleOutputs<Text, Text> multipleOutputs;
         ///
         /// Counts all the valuable data in each line
         ///
-
-        protected void setup(Context context) throws IOException, InterruptedException {
-            multipleOutputs = new MultipleOutputs<>(context);
-        }
-
         @Override
         public void map(LongWritable lineId, Text line, Context context) throws IOException, InterruptedException {
-            multipleOutputs.write("debugOutput", new Text("[DEBUG] Processing line"), new Text(line));
 
             String[] fields = line.toString().split("\t"); // head_word<TAB>syntactic-ngram<TAB>total_count<TAB>counts_by_year
 
             if (fields.length < 4) { // Unknown format
-                multipleOutputs.write("debugOutput", new Text("[DEBUG] Invalid line format"),
-                        new Text("Expected 4 fields, got " + fields.length));
                 return;
             }
 
             String count = fields[2];
             String[] words = fields[1].split(" ");
-
-            multipleOutputs.write("debugOutput", new Text("[DEBUG] Parsed fields"),
-                    new Text(String.format("count: %s, words: %s", count, Arrays.toString(words))));
 
             String[][] parts = new String[words.length][4];
             // Replace each word with it's stemmed version
@@ -82,22 +68,11 @@ public class Step1 {
                     context.getCounter("TotalCounters", "L").increment(Integer.parseInt(count));
                     context.getCounter("TotalCounters", "F").increment(Integer.parseInt(count));
 
-                    multipleOutputs.write("debugOutput", new Text("[DEBUG] Processing word"),
-                            new Text(String.format("word: %s | lex: %s | feat: %s", Arrays.toString(word), lex, feat)));
-
-
                 } catch (Exception e) {
-                    multipleOutputs.write("debugOutput", new Text("[DEBUG] Skipping line"),
-                            new Text(String.format("line: %s | parts: %s | word: %s | word[3]: %s [END]", line, Arrays.deepToString(parts), Arrays.toString(word), word[3])));
+                    System.err.println("[ERROR]\n" + e.getMessage());
                 }
             }
         }
-
-        @Override
-        protected void cleanup(Context context) throws IOException, InterruptedException {
-            multipleOutputs.close();
-        }
-
     }
 
     public static class ReducerClass extends Reducer<Text, Text, Text, Text> {
@@ -115,8 +90,6 @@ public class Step1 {
 
     public static void main(String[] args) throws Exception {
         System.out.println("[DEBUG] STEP 1 started!");
-
-        // String jarBucketName = "classifierinfo1";
 
         String jarBucketName = args[1];
         String inputPath = args[2];
@@ -139,8 +112,6 @@ public class Step1 {
         FileInputFormat.addInputPath(job, new Path(inputPath));
 
         FileOutputFormat.setOutputPath(job, new Path(outputPath));
-
-        MultipleOutputs.addNamedOutput(job, "debugOutput", TextOutputFormat.class, Text.class, Text.class);
 
         boolean success = job.waitForCompletion(true);
 

@@ -8,8 +8,8 @@ import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.fs.FileSystem;
 
 import java.io.*;
@@ -73,19 +73,16 @@ public class Step4 {
     /// output: ?
     ///
     public static class MapperClass extends Mapper<LongWritable, Text, CompositeKey, Text> {
+
         public LinkedHashMap<String, HashSet<String>> GoldenStandard = new LinkedHashMap<>();
-        private MultipleOutputs<CompositeKey, Text> multipleOutputs;
+
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
-            multipleOutputs = new MultipleOutputs<>(context);
 
             Configuration conf = context.getConfiguration();
             String s3InputPath = conf.get("goldStandardPath");
-            
-            // String s3InputPath = "s3a://" + jarBucketName + "/test_gold_standard.txt";
 
-            // Configure the FileSystem
             FileSystem fs = FileSystem.get(URI.create(s3InputPath), new Configuration());
 
             // Read the file
@@ -155,31 +152,24 @@ public class Step4 {
                         w1 = lex;
                         w2 = wordToPos[0];
                     }
-//                    multipleOutputs.write("debugOutput", new Text(String.format("[DEBUG] mapper key: %s %s", w1,w2)), new Text(String.format("pos:%s isRelated:%s", pos, isRelated)));
 
                     String key = String.format("%s %s", w1, w2);
                     CompositeKey compositeKey = new CompositeKey(key, feat, isRelated);
                     context.write(compositeKey,
                             new Text(String.format("%s %s %s %s %s %s", feat, lex, assoc_freq, assoc_prob, assoc_PMI, assoc_t_test)));
+
                 }
              }
         }
 
-        @Override
-        protected void cleanup(Context context) throws IOException, InterruptedException {
-            multipleOutputs.close();
-        }
+
     }
 
 
     public static class ReducerClass extends Reducer<CompositeKey, Text, Text, Text> {
+
+
         private MultipleOutputs<Text, Text> multipleOutputs;
-
-        @Override
-        protected void setup(Context context) throws IOException {
-            multipleOutputs = new MultipleOutputs<>(context);
-        }
-
         public final String[] ZEROS = {"_","_","0=0","0=0","0=0","0=0"};
 
         public double[] distManhattan = new double[4];
@@ -188,6 +178,10 @@ public class Step4 {
         public double[][] simJaccard = new double[4][2];
         public double[][] simDice = new double[4][2];
         public double[][] simJS = new double[4][2];
+
+        protected void setup(Context context) throws IOException, InterruptedException {
+            multipleOutputs = new MultipleOutputs<>(context);
+        }
 
 
         /** DIFF-MATRIX:
@@ -214,7 +208,8 @@ public class Step4 {
             String[] lastVal = null;
 
             for (Text val : values) {
-//                multipleOutputs.write("debugOutput", new Text(String.format("[DEBUG] reducer key: %s %s %s", w1,w2, isRelated)), new Text("val: " + val.toString()));
+                multipleOutputs.write("debug", new Text(compKey.getOriginalKey()), val);
+
                 String[] parts = val.toString().split("\\s+");
                 if (parts.length != 6) {
                     continue;
@@ -255,8 +250,6 @@ public class Step4 {
             // Final calculations
             double[][] diffMetrix = new double[4][6];
 
-            // CHECK DIVISION BY ZERO ?
-
             for (int i = 0; i < 4; i++) {
                 diffMetrix[i][0] = distManhattan[i];
                 diffMetrix[i][1] = Math.sqrt(distEuclidean[i]);
@@ -273,8 +266,7 @@ public class Step4 {
                                                 .flatMapToDouble(Arrays::stream)
                                                 .toArray();
 
-            // context.write(new Text(String.format("%s %s %s", w1, w2, isRelated)), new Text(Arrays.deepToString(diffMetrix)));
-            context.write(new Text(String.format("%s %s %s", w2, w1, isRelated)), new Text(Arrays.toString(flattenDiffMatrix)));
+            context.write(new Text(String.format("%s %s %s", w1, w2, isRelated)), new Text(Arrays.toString(flattenDiffMatrix)));
 
             cleanDiffMatrix();
 
@@ -292,12 +284,7 @@ public class Step4 {
                 
                 handleDistManhattan(i-2, val1, val2);
                 handleDistEuclidean(i-2, val1, val2);
-                try {
-                    handleSimCosine(i-2, val1, val2);
-                } catch (IOException | InterruptedException e) {
-                    continue;
-//                    multipleOutputs.write("debugOutput", new Text("ERROR"), new Text(String.format("SimCosine val1:%s val2:%s", val1,val2)));
-                }
+                handleSimCosine(i-2, val1, val2);
                 handleSimJaccard(i-2, val1, val2);
                 handleSimDice(i-2, val1, val2);
                 handleSimJS(i-2, val1, val2);
@@ -330,18 +317,18 @@ public class Step4 {
             simDice[i][1] += val1 + val2;
         }
 
-        private void handleSimJS(int i, double val1, double val2) {
+        private void handleSimJS(int i, double val1, double val2) throws IOException, InterruptedException{
             double mean = (val1 + val2) / 2.0;
 
-            // When both values are 0, the contribution to JS divergence is 0
             if (val1 == 0 && val2 == 0) {
                 simJS[i][0] = 0;
                 simJS[i][1] = 0;
                 return;
             }
-            // When val1 is 0, its contribution to KL divergence is 0
+            
+//            multipleOutputs.write("debug" ,new Text(String.format("[DEBUG] SimJS : val1: %s val2: %s mean: %s" , val1, val2, mean)) , new Text(String.format("log1: %s log2: %s" , Math.log(val1 / mean), Math.log(val2 / mean))) );
+            
             simJS[i][0] += (val1 > 0) ? val1 * Math.log(val1 / mean) : 0;
-            // When val2 is 0, its contribution to KL divergence is 0
             simJS[i][1] += (val2 > 0) ? val2 * Math.log(val2 / mean) : 0;
         }
         
@@ -399,9 +386,6 @@ public class Step4 {
     public static void main(String[] args) throws Exception {
         System.out.println("[DEBUG] STEP 4 started!");
 
-        // String jarBucketName = "classifierinfo1";
-
-        String jarBucketName = args[1];
         String inputPath = args[2];
         String outputPath = args[3];
         String goldStandardPath = args[4];
@@ -414,7 +398,6 @@ public class Step4 {
         job.setJarByClass(Step4.class);
         job.setMapperClass(MapperClass.class);
         job.setReducerClass(ReducerClass.class);
-//        job.setCombinerClass(ReducerClass.class);
 
         job.setGroupingComparatorClass(OriginalKeyGroupingComparator.class);
         job.setSortComparatorClass(CompositeKeyComparator.class);
@@ -431,9 +414,9 @@ public class Step4 {
         
         FileInputFormat.addInputPath(job, new Path(inputPath + "part-r*"));
 
-        FileOutputFormat.setOutputPath(job, new Path(outputPath));
+        MultipleOutputs.addNamedOutput(job, "debug", TextOutputFormat.class, Text.class, Text.class);
 
-//        MultipleOutputs.addNamedOutput(job, "debugOutput", TextOutputFormat.class, Text.class, Text.class);
+        FileOutputFormat.setOutputPath(job, new Path(outputPath));
 
         boolean success = job.waitForCompletion(true);
         System.exit(success ? 0 : 1);
