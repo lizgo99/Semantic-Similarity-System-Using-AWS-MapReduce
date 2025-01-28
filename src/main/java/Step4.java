@@ -9,7 +9,6 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.fs.FileSystem;
 
 import java.io.*;
@@ -177,7 +176,6 @@ public class Step4 {
     ///                      value = 24-dimensioned similarity vector
     ///
     public static class ReducerClass extends Reducer<CompositeKey, Text, Text, Text> {
-        MultipleOutputs<Text, Text> multipleOutputs;
         public final String[] ZEROS = {"_","_","0=0","0=0","0=0","0=0"};
 
         public double[] distManhattan = new double[4];
@@ -186,13 +184,6 @@ public class Step4 {
         public double[][] simJaccard = new double[4][2];
         public double[][] simDice = new double[4][2];
         public double[][] simJS = new double[4][2];
-
-
-
-        @Override
-        protected void setup(Context context) throws IOException, InterruptedException {
-            multipleOutputs = new MultipleOutputs<>(context);
-        }
 
         /** DIFF-MATRIX:
          *              distManhattan   distEuclidean   simCosine   simJaccard  simDice  simJS
@@ -302,15 +293,6 @@ public class Step4 {
                 } else {
                     diffMetrix[i][5] = simJS[i][0] + simJS[i][1];
                 }
-//                diffMetrix[i][0] = distManhattan[i];
-//                diffMetrix[i][1] = Math.sqrt(distEuclidean[i]);
-//                diffMetrix[i][2] = simCosine[i][1] != 0 && simCosine[i][2] != 0 ?
-//                        simCosine[i][0] / (Math.sqrt(simCosine[i][1]) * Math.sqrt(simCosine[i][2])) : Double.NaN;
-//                diffMetrix[i][3] = simJaccard[i][1] != 0 ?
-//                        simJaccard[i][0] / simJaccard[i][1] : Double.NaN;
-//                diffMetrix[i][4] = simDice[i][1] != 0 ?
-//                        2 * simDice[i][0] / simDice[i][1] : Double.NaN;
-//                diffMetrix[i][5] = simJS[i][0] + simJS[i][1];
             }
 
             double[] flattenDiffMatrix = Arrays.stream(diffMetrix)
@@ -378,9 +360,6 @@ public class Step4 {
                         
             simJS[i][0] += (val1 > 0 && mean > 0) ? val1 * Math.log(val1 / mean) : 0;
             simJS[i][1] += (val2 > 0 && mean > 0) ? val2 * Math.log(val2 / mean) : 0;
-
-//             multipleOutputs.write("debug", new Text(String.format("val1: %s val2: %s mean: %s", val1, val2, mean)), new Text(String.format("simJS[i][0]: %s simJS[i][1]: %s", (val1 > 0 && mean > 0) ? val1 * Math.log(val1 / mean) : 0 , (val2 > 0 && mean > 0) ? val2 * Math.log(val2 / mean) : 0)));
-
         }
         
         private void cleanDiffMatrix() {
@@ -393,11 +372,6 @@ public class Step4 {
                 Arrays.fill(simJaccard[i], 0);
                 Arrays.fill(simJS[i], 0);
             }
-        }
-
-        @Override
-        protected void cleanup(Context context) throws IOException, InterruptedException {
-            multipleOutputs.close();
         }
     }
 
@@ -466,7 +440,6 @@ public class Step4 {
         FileInputFormat.addInputPath(job, new Path(inputPath + "part-r*"));
 
         FileOutputFormat.setOutputPath(job, new Path(outputPath));
-        MultipleOutputs.addNamedOutput(job, "debug", TextOutputFormat.class, Text.class, Text.class);
 
         boolean success = job.waitForCompletion(true);
         System.exit(success ? 0 : 1);
