@@ -259,15 +259,58 @@ public class Step4 {
             double[][] diffMetrix = new double[4][6];
 
             for (int i = 0; i < 4; i++) {
-                diffMetrix[i][0] = distManhattan[i];
-                diffMetrix[i][1] = Math.sqrt(distEuclidean[i]);
-                diffMetrix[i][2] = simCosine[i][1] != 0 && simCosine[i][2] != 0 ?
-                        simCosine[i][0] / (Math.sqrt(simCosine[i][1]) * Math.sqrt(simCosine[i][2])) : Double.NaN;
-                diffMetrix[i][3] = simJaccard[i][1] != 0 ?
-                        simJaccard[i][0] / simJaccard[i][1] : Double.NaN;
-                diffMetrix[i][4] = simDice[i][1] != 0 ?
-                        2 * simDice[i][0] / simDice[i][1] : Double.NaN;
-                diffMetrix[i][5] = simJS[i][0] + simJS[i][1];
+                // If the final result is meaningless, count it as unrelated
+
+                // Manhattan distance
+                if (Double.isNaN(distManhattan[i])) {
+                    diffMetrix[i][0] = Double.POSITIVE_INFINITY;
+                } else {
+                    diffMetrix[i][0] = distManhattan[i];
+                }
+
+                // Euclidean distance
+                if (distEuclidean[i] < 0 || Double.isNaN(distEuclidean[i])) {
+                    diffMetrix[i][1] = Double.POSITIVE_INFINITY;
+                } else {
+                    diffMetrix[i][1] = Math.sqrt(distEuclidean[i]);
+                }
+
+                // Cosine similarity
+                if (simCosine[i][1] <= 0 || simCosine[i][2] <= 0 || Double.isNaN(simCosine[i][0] / (Math.sqrt(simCosine[i][1]) * Math.sqrt(simCosine[i][2])))) {
+                    diffMetrix[i][2] = 0;
+                } else {
+                    diffMetrix[i][2] = simCosine[i][0] / (Math.sqrt(simCosine[i][1]) * Math.sqrt(simCosine[i][2]));
+                }
+
+                // Jaccard similarity
+                if (simJaccard[i][1] == 0 || Double.isNaN(simJaccard[i][0] / simJaccard[i][1])) {
+                    diffMetrix[i][3] = 0;
+                } else {
+                    diffMetrix[i][3] = simJaccard[i][0] / simJaccard[i][1];
+                }
+
+                // Dice similarity
+                if (simDice[i][1] == 0 || Double.isNaN(2 * simDice[i][0] / simDice[i][1])) {
+                    diffMetrix[i][4] = 0;
+                } else {
+                    diffMetrix[i][4] = 2 * simDice[i][0] / simDice[i][1];
+                }
+
+                // JS divergence
+                if (Double.isNaN(simJS[i][0] + simJS[i][1])) {
+                    diffMetrix[i][5] = Double.POSITIVE_INFINITY;
+                } else {
+                    diffMetrix[i][5] = simJS[i][0] + simJS[i][1];
+                }
+//                diffMetrix[i][0] = distManhattan[i];
+//                diffMetrix[i][1] = Math.sqrt(distEuclidean[i]);
+//                diffMetrix[i][2] = simCosine[i][1] != 0 && simCosine[i][2] != 0 ?
+//                        simCosine[i][0] / (Math.sqrt(simCosine[i][1]) * Math.sqrt(simCosine[i][2])) : Double.NaN;
+//                diffMetrix[i][3] = simJaccard[i][1] != 0 ?
+//                        simJaccard[i][0] / simJaccard[i][1] : Double.NaN;
+//                diffMetrix[i][4] = simDice[i][1] != 0 ?
+//                        2 * simDice[i][0] / simDice[i][1] : Double.NaN;
+//                diffMetrix[i][5] = simJS[i][0] + simJS[i][1];
             }
 
             double[] flattenDiffMatrix = Arrays.stream(diffMetrix)

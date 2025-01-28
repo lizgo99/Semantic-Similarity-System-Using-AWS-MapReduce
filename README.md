@@ -132,7 +132,7 @@ Total Number of Instances              14337
 
 **100% Dataset Summary**
 
-The program ran on `99` files (the whole dataset). It ran for `~?` minute with 8 instances of `m4.xlarge`.
+The program ran on `99` files (the whole dataset). It ran for `~6` hours with 8 instances of `m4.xlarge`.
 
 ```
 Correctly Classified Instances           13394               93.4226 %
