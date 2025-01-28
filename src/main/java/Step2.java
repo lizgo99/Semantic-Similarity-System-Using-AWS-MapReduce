@@ -12,9 +12,15 @@ import java.io.IOException;
 
 public class Step2 {
     ///
-    /// input: <key, value> key = l word or key = f feature_word-dep_label or key =
-    /// lf word feature_word-dep_label, value = count
-    /// output: <key, value> key = lex/ feature and type of info (l, f or lf), value =
+    /// input: <key, value>:  key = lineID
+    ///                       value = l word    count
+    ///                       or value = f feature_word-dep_label   count
+    ///                       or value = lf word feature_word-dep_label   count
+    ///
+    /// output: <key, value>:  key = word lf , value = lf word feature count
+    ///                        or key = feature lf , value = lf word feature count
+    ///                        or key = word l, value = l count
+    ///                        or key = word f, value = f count
     ///
     public static class MapperClass extends Mapper<LongWritable, Text, Text, Text> {
 
@@ -26,20 +32,32 @@ public class Step2 {
             }
             String type = fields[0];
             if (fields[0].equals("lf") && fields.length > 3) {
-                context.write(new Text(String.format("%s %s", fields[1], type)),
-                        new Text(String.format("lf %s %s %s", fields[1], fields[2], fields[3])));
-                context.write(new Text(String.format("%s %s", fields[2], type)),
-                        new Text(String.format("lf %s %s %s", fields[1], fields[2], fields[3])));
+                context.write(new Text(String.format("%s %s", fields[1], type)), // word (lexeme) | type lf
+                        new Text(String.format("lf %s %s %s", fields[1], fields[2], fields[3]))); // word (lexeme) | feature | count
+
+                context.write(new Text(String.format("%s %s", fields[2], type)), // feature | type lf
+                        new Text(String.format("lf %s %s %s", fields[1], fields[2], fields[3]))); // word (lexeme) | feature | count
             } else {
-                context.write(new Text(String.format("%s %s", fields[1], type)),
-                        new Text(String.format("%s %s", type, fields[2])));
+                context.write(new Text(String.format("%s %s", fields[1], type)), // word (lexeme) | type l or f
+                        new Text(String.format("%s %s", type, fields[2]))); // type | count
             }
         }
     }
 
+
+    ///
+    /// input: <key, value>:  key = word lf , value = lf word feature count
+    ///                        or key = feature lf , value = lf word feature count
+    ///                        or key = word l, value = l count
+    ///                        or key = word f, value = f count
+    ///
+    /// output: <key, value>: key = word feature,
+    ///                       value = lf=count f=keywordCount
+    ///                       or value = lf=count l=keywordCount
+    ///
     public static class ReducerClass extends Reducer<Text, Text, Text, Text> {
         public String keywordType = null;
-        public String keywordVal = null;
+        public String keywordCount = null;
 
         @Override
         public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
@@ -53,10 +71,10 @@ public class Step2 {
 
                 if (fields[0].equals("l") || fields[0].equals("f")) {
                     keywordType = fields[0];
-                    keywordVal = fields[1];
+                    keywordCount = fields[1];
                 } else if (fields.length > 2) {
                     String k = String.format("%s %s", fields[1], fields[2]);
-                    String v = String.format("lf=%s %s=%s", fields[3], keywordType, keywordVal);
+                    String v = String.format("lf=%s %s=%s", fields[3], keywordType, keywordCount);
                     context.write(new Text(k), new Text(v));
                 }
             }
@@ -81,10 +99,6 @@ public class Step2 {
         String jarBucketName = args[1];
         String inputPath = args[2];
         String outputPath = args[3];
-
-        System.out.println("[DEBUG] Input path: " + inputPath);
-        System.out.println("[DEBUG] Output path: " + outputPath);
-        System.out.println("[DEBUG] Jar bucket name: " + jarBucketName);
 
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "Step2");

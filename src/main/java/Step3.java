@@ -7,6 +7,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.fs.FileSystem;
 
 import java.io.*;
@@ -14,8 +15,13 @@ import java.net.URI;
 
 public class Step3 {
     ///
-    /// input: ?
-    /// output: ?
+    /// input: <key, value>: key = word feature,
+    ///                       value = word feature  lf=count f=keywordCount
+    ///                       or value = word feature   lf=count l=keywordCount
+    ///
+    /// output: <key, value>: key = word feature,
+    ///                       value = lf=count f=keywordCount
+    ///                       or value = lf=count l=keywordCount
     ///
     public static class MapperClass extends Mapper<LongWritable, Text, Text, Text> {
 
@@ -33,16 +39,28 @@ public class Step3 {
 
             context.write(new Text(String.format("%s %s", w1, w2)), new Text(String.format("%s %s", lf, f_or_l)));
         }
+
     }
 
+    ///
+    /// input: <key, value>: key = word feature,
+    ///                      value = lf=count f=keywordCount
+    ///                      or value = lf=count l=keywordCount
+    ///
+    /// output: <key, value>: key = word feature,
+    ///                       value = assoc_freq=_ assoc_prob=_ assoc_PMI=_ assoc_t_test=_
+    ///
     public static class ReducerClass extends Reducer<Text, Text, Text, Text> {
         public double L;
         public double F;
+
+        MultipleOutputs<Text, Text> multipleOutputs;
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
             L = Double.parseDouble(context.getConfiguration().get("L"));
             F = Double.parseDouble(context.getConfiguration().get("F"));
+            multipleOutputs = new MultipleOutputs<>(context);
         }
 
         @Override
@@ -77,29 +95,32 @@ public class Step3 {
                 double assoc_PMI = (F * lf) / (l * f);
 
                 // Vector assoc_t_test (8)
-                double assoc_t_test = ((lf / L) - (l / L * f / F)) / (Math.sqrt(l / L * f / F));
+                double assoc_t_test = ((lf / L) - ((l / L ) * (f / F))) / (Math.sqrt((l / L) * (f / F))); 
+
+//                multipleOutputs.write("debug", key,
+//                        new Text(String.format("(lf / L)=%s (l / L )=%s (f / F)=%s (l / L) * (f / F)=%s Math.sqrt((l / L) * (f / F))=%s ((lf / L) - ((l / L ) * (f / F)))=%s",
+//                        (lf / L), (l / L ), (f / F), (l / L) * (f / F), Math.sqrt((l / L) * (f / F)), ((lf / L) - ((l / L ) * (f / F))))));
 
                 context.write(key,
                         new Text(String.format("assoc_freq=%s assoc_prob=%s assoc_PMI=%s assoc_t_test=%s",
                                 assoc_freq, assoc_prob, assoc_PMI, assoc_t_test)));
             } else {
-                context.write(key, new Text(String.format("Error! l=%s f=%s lf=%s", l, f, lf)));
+                System.err.println(String.format("Error! l=%s f=%s lf=%s", l, f, lf));
             }
+        }
+
+        @Override
+        public void cleanup(Context context) throws IOException, InterruptedException {
+            multipleOutputs.close();
         }
     }
 
     public static void main(String[] args) throws Exception {
         System.out.println("[DEBUG] STEP 3 started!");
 
-        // String jarBucketName = "classifierinfo1";
-
         String jarBucketName = args[1];
         String inputPath = args[2];
         String outputPath = args[3];
-
-        System.out.println("[DEBUG] Input path: " + inputPath); 
-        System.out.println("[DEBUG] Output path: " + outputPath); 
-        System.out.println("[DEBUG] Jar bucket name: " + jarBucketName);
 
         String s3InputPath = "s3a://" + jarBucketName + "/counters";
         FileSystem fs = FileSystem.get(URI.create(s3InputPath), new Configuration());
@@ -144,6 +165,7 @@ public class Step3 {
         FileInputFormat.addInputPath(job, new Path(inputPath + "part-r*"));
 
         FileOutputFormat.setOutputPath(job, new Path(outputPath));
+//        MultipleOutputs.addNamedOutput(job, "debug", TextOutputFormat.class, Text.class, Text.class);
 
         boolean success = job.waitForCompletion(true);
         System.exit(success ? 0 : 1);

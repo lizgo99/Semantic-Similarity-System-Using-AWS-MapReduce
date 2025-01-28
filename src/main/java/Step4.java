@@ -69,8 +69,12 @@ public class Step4 {
     }
 
     ///
-    /// input: ?
-    /// output: ?
+    /// input: <key, value>: key = lineID ,
+    ///                       value = word feature  assoc_freq=_ assoc_prob=_ assoc_PMI=_ assoc_t_test=_
+    ///
+    /// output: <key, value>: key = new CompositeKey("w1 w2", feature, isRelated)
+    ///                       or key = new CompositeKey("w2 w1", feature, isRelated)
+    ///                       value = feature lexeme assoc_freq=_ assoc_prob=_ assoc_PMI=_ assoc_t_test=_
     ///
     public static class MapperClass extends Mapper<LongWritable, Text, CompositeKey, Text> {
 
@@ -121,7 +125,6 @@ public class Step4 {
         }
 
 
-
         @Override
         public void map(LongWritable lineId, Text line, Context context) throws IOException, InterruptedException {
 
@@ -165,11 +168,16 @@ public class Step4 {
 
     }
 
-
+    ///
+    /// input: <key, value>: key = lineID ,
+    ///                       value = CompositeKey("w1 w2", feature, isRelated)     feature lexeme assoc_freq=_ assoc_prob=_ assoc_PMI=_ assoc_t_test=_
+    ///                       or value = CompositeKey("w2 w1", feature, isRelated)     feature lexeme assoc_freq=_ assoc_prob=_ assoc_PMI=_ assoc_t_test=_
+    ///
+    /// output: <key, value>: key = w1 w2 isRelated,
+    ///                      value = 24-dimensioned similarity vector
+    ///
     public static class ReducerClass extends Reducer<CompositeKey, Text, Text, Text> {
-
-
-        private MultipleOutputs<Text, Text> multipleOutputs;
+        MultipleOutputs<Text, Text> multipleOutputs;
         public final String[] ZEROS = {"_","_","0=0","0=0","0=0","0=0"};
 
         public double[] distManhattan = new double[4];
@@ -179,10 +187,12 @@ public class Step4 {
         public double[][] simDice = new double[4][2];
         public double[][] simJS = new double[4][2];
 
+
+
+        @Override
         protected void setup(Context context) throws IOException, InterruptedException {
             multipleOutputs = new MultipleOutputs<>(context);
         }
-
 
         /** DIFF-MATRIX:
          *              distManhattan   distEuclidean   simCosine   simJaccard  simDice  simJS
@@ -208,8 +218,6 @@ public class Step4 {
             String[] lastVal = null;
 
             for (Text val : values) {
-                multipleOutputs.write("debug", new Text(compKey.getOriginalKey()), val);
-
                 String[] parts = val.toString().split("\\s+");
                 if (parts.length != 6) {
                     continue;
@@ -319,17 +327,17 @@ public class Step4 {
 
         private void handleSimJS(int i, double val1, double val2) throws IOException, InterruptedException{
             double mean = (val1 + val2) / 2.0;
-
             if (val1 == 0 && val2 == 0) {
                 simJS[i][0] = 0;
                 simJS[i][1] = 0;
                 return;
             }
-            
-//            multipleOutputs.write("debug" ,new Text(String.format("[DEBUG] SimJS : val1: %s val2: %s mean: %s" , val1, val2, mean)) , new Text(String.format("log1: %s log2: %s" , Math.log(val1 / mean), Math.log(val2 / mean))) );
-            
-            simJS[i][0] += (val1 > 0) ? val1 * Math.log(val1 / mean) : 0;
-            simJS[i][1] += (val2 > 0) ? val2 * Math.log(val2 / mean) : 0;
+                        
+            simJS[i][0] += (val1 > 0 && mean > 0) ? val1 * Math.log(val1 / mean) : 0;
+            simJS[i][1] += (val2 > 0 && mean > 0) ? val2 * Math.log(val2 / mean) : 0;
+
+//             multipleOutputs.write("debug", new Text(String.format("val1: %s val2: %s mean: %s", val1, val2, mean)), new Text(String.format("simJS[i][0]: %s simJS[i][1]: %s", (val1 > 0 && mean > 0) ? val1 * Math.log(val1 / mean) : 0 , (val2 > 0 && mean > 0) ? val2 * Math.log(val2 / mean) : 0)));
+
         }
         
         private void cleanDiffMatrix() {
@@ -414,9 +422,8 @@ public class Step4 {
         
         FileInputFormat.addInputPath(job, new Path(inputPath + "part-r*"));
 
-        MultipleOutputs.addNamedOutput(job, "debug", TextOutputFormat.class, Text.class, Text.class);
-
         FileOutputFormat.setOutputPath(job, new Path(outputPath));
+        MultipleOutputs.addNamedOutput(job, "debug", TextOutputFormat.class, Text.class, Text.class);
 
         boolean success = job.waitForCompletion(true);
         System.exit(success ? 0 : 1);

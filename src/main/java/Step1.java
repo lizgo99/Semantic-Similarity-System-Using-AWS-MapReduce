@@ -15,10 +15,15 @@ import java.io.IOException;
 import java.net.URI;
 
 public class Step1 {
+    ///
+    /// input: <key, value>: key = lineID,
+    ///                      value = head_word<TAB>syntactic-ngram<TAB>total_count<TAB>counts_by_year
+    ///
+    /// output: <key, value>: key = l lexeme or f feature or lf lexeme feature,
+    ///                       value = count
+    ///
     public static class MapperClass extends Mapper<LongWritable, Text, Text, Text> {
-        ///
-        /// Counts all the valuable data in each line
-        ///
+
         @Override
         public void map(LongWritable lineId, Text line, Context context) throws IOException, InterruptedException {
 
@@ -75,12 +80,19 @@ public class Step1 {
         }
     }
 
+    ///
+    /// input: <key, value> key = l lexeme or f feature or lf lexeme feature,
+    ///                     value = count
+    ///
+    /// output: <key, value> key = l lexeme or f feature or lf lexeme feature,
+    ///                      value = acc
+    ///
     public static class ReducerClass extends Reducer<Text, Text, Text, Text> {
 
         @Override
         public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
             int acc = 0;
-            
+
             for (Text value : values) {
                 acc += Integer.parseInt(value.toString());
             }

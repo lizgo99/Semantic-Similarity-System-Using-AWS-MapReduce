@@ -21,8 +21,8 @@ public class App {
     public static String jarFolderName = "/jars/";
 
     public static String dataBucketName = "biarcs-dataset";
-     public static String inputDataFolder = "/data1/";
-//    public static String inputDataFolder = "/data10/";
+//     public static String inputDataFolder = "/data1/";
+    public static String inputDataFolder = "/data10/";
 //     public static String inputDataFolder = "/data/";
 
     public static String goldStandardFileName = "/word-relatedness.txt";
@@ -49,10 +49,10 @@ public class App {
         HadoopJarStepConfig step1 = new HadoopJarStepConfig()
                 .withJar("s3://" + jarBucketName + jarFolderName + "Step1.jar")
                 .withMainClass("Step1")
-                .withArgs(jarBucketName, 
+                .withArgs(jarBucketName,
                         "s3://" + dataBucketName + inputDataFolder,
 //                         "s3://" + jarBucketName + "/input-samples/",
-                        "s3://" + jarBucketName + "/step1_output_1_file/");
+                        "s3://" + jarBucketName + "/step1_output_10_file/");
 
         StepConfig stepConfig1 = new StepConfig()
                 .withName("Step1")
@@ -63,9 +63,9 @@ public class App {
         HadoopJarStepConfig step2 = new HadoopJarStepConfig()
                 .withJar("s3://" + jarBucketName + jarFolderName + "Step2.jar")
                 .withMainClass("Step2")
-                .withArgs(jarBucketName, 
-                        "s3://" + jarBucketName + "/step1_output_1_file/",
-                        "s3://" + jarBucketName + "/step2_output_1_file/");
+                .withArgs(jarBucketName,
+                        "s3://" + jarBucketName + "/step1_output_10_file/",
+                        "s3://" + jarBucketName + "/step2_output_10_file/");
 
         StepConfig stepConfig2 = new StepConfig()
                 .withName("Step2")
@@ -76,9 +76,9 @@ public class App {
         HadoopJarStepConfig step3 = new HadoopJarStepConfig()
                 .withJar("s3://" + jarBucketName + jarFolderName + "Step3.jar")
                 .withMainClass("Step3")
-                .withArgs(jarBucketName, 
-                        "s3://" + jarBucketName + "/step2_output_1_file/",
-                        "s3://" + jarBucketName + "/step3_output_1_file/");
+                .withArgs(jarBucketName,
+                        "s3://" + jarBucketName + "/step2_output_10_file/",
+                        "s3://" + jarBucketName + "/step3_output_10_file/");
 
         StepConfig stepConfig3 = new StepConfig()
                 .withName("Step3")
@@ -89,9 +89,9 @@ public class App {
         HadoopJarStepConfig step4 = new HadoopJarStepConfig()
                 .withJar("s3://" + jarBucketName + jarFolderName + "Step4.jar")
                 .withMainClass("Step4")
-                .withArgs(jarBucketName, 
-                        "s3://" + jarBucketName + "/step3_output_1_file/",
-                        "s3://" + jarBucketName + "/step4_output_1_file/",
+                .withArgs(jarBucketName,
+                        "s3://" + jarBucketName + "/step3_output_10_file/",
+                        "s3://" + jarBucketName + "/step4_output_10_file/",
                         "s3://" + jarBucketName + goldStandardFileName);
 
         StepConfig stepConfig4 = new StepConfig()
@@ -103,9 +103,9 @@ public class App {
         HadoopJarStepConfig step5 = new HadoopJarStepConfig()
                 .withJar("s3://" + jarBucketName + jarFolderName + "Step5.jar")
                 .withMainClass("Step5")
-                .withArgs(jarBucketName, 
-                        "step4_output_1_file/", // no need for full path here
-                        "step5_output_1_file/");
+                .withArgs(jarBucketName,
+                        "step4_output_10_file/", // no need for full path here
+                        "step5_output_10_file/");
 
         StepConfig stepConfig5 = new StepConfig()
                 .withName("Step5")
@@ -126,9 +126,7 @@ public class App {
         RunJobFlowRequest runFlowRequest = new RunJobFlowRequest()
                 .withName("Map reduce project")
                 .withInstances(instances)
-//                .withSteps(stepConfig3, stepConfig4)
-//                 .withSteps(stepConfig4)
-                 .withSteps(stepConfig5)
+                .withSteps(stepConfig1, stepConfig2,stepConfig3, stepConfig4, stepConfig5)
                 .withLogUri("s3://" + jarBucketName + "/logs/")
                 .withServiceRole("EMR_DefaultRole")
                 .withJobFlowRole("EMR_EC2_DefaultRole")
