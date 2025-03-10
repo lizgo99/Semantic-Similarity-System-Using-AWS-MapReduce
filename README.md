@@ -99,6 +99,8 @@ Our program processes a large corpus, the English All - Biarcs dataset from Goog
 1. Train and evaluate the Random Forest classifier using 10-fold cross-validation.
 2. Evaluate the classifier on the feature vectors.
 
+- This step can be run as the last step of the job flow but it can also be run separately given the data of the output folder of the previous step (step4) as input. To run it separately, use the WekaModel class.
+
 **Results:**
 
 **10% Dataset Summary**

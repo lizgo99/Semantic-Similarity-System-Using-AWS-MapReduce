@@ -23,14 +23,14 @@ import weka.classifiers.Evaluation;
 import weka.classifiers.trees.RandomForest;
 import weka.core.Instances;
 
-public class Step5 {
+public class WekaModel {
 
     private static final AmazonS3 s3Client = AmazonS3ClientBuilder
                                                 .standard()
                                                 .withRegion("us-east-1")
                                                 .build();
 
-    private static List<String> listPartFiles(String bucketName, String s3InputFolder)
+    private static List<String> listPartFiles(String bucketName, String s3InputFolder, String s3OutputFolder)
             throws AmazonClientException {
 
         List<String> partFiles = new ArrayList<>();
@@ -50,8 +50,8 @@ public class Step5 {
         return partFiles;
     }
 
-    private static File createArffFile(List<String> partFiles, String bucketName) {
-        File arffFile = new File("/tmp/step5_data.arff");
+    private static File createArffFile(List<String> partFiles, String bucketName, String s3OutputFolder) {
+        File arffFile = new File(s3OutputFolder + "WekaModel_input_data.arff");
         try (BufferedWriter arffWriter = new BufferedWriter(new FileWriter(arffFile))) {
 
             writeArffHeader(arffWriter);
@@ -122,8 +122,8 @@ public class Step5 {
 
     }
 
-    private static File evaluateClassifier(File arffFile) {
-        File outputFile = new File("/tmp/step5_output.txt");
+    private static File evaluateClassifier(File arffFile, String s3OutputFolder) {
+        File outputFile = new File(s3OutputFolder + "WekaModel_output.txt");
 
         try (BufferedWriter outputWriter = new BufferedWriter(new FileWriter(outputFile))) {
             // Load data
@@ -173,38 +173,25 @@ public class Step5 {
         return outputFile;
     }
 
-    private static void uploadResults(String bucketName, File arffFile, File outputFile, String s3OutputFolder) throws AmazonClientException {
-        // Upload ARFF
-        String resultKey = s3OutputFolder + "step5_result.arff";
-        s3Client.putObject(bucketName, resultKey, arffFile);
-        System.out.println("[DEBUG] ARFF file uploaded to s3://" + bucketName + "/" + resultKey);
-
-        // Upload output
-        String outputFileKey = s3OutputFolder + "step5_output.txt";
-        s3Client.putObject(bucketName, outputFileKey, outputFile);
-        System.out.println("[DEBUG] Output file uploaded to s3://" + bucketName + "/" + outputFileKey);
-    }
-
     public static void main(String[] args) throws IOException {
 
         if (args.length < 3) {
-            System.err.println("Usage: Step5 <bucketName> <inputFolder> <outputFolder>");
+            System.err.println("Usage: WekaModel <bucketName> <inputFolder> <outputFolder>");
             System.exit(1);
         }
 
-        String bucketName = args[1];
-        String s3InputFolder = args[2];
-        String s3OutputFolder = args[3];
+        String bucketName = args[0];
+        String s3InputFolder = args[1];
+        String s3OutputFolder = args[2];
 
         try{
 
-            List<String> partFiles = listPartFiles(bucketName, s3InputFolder);
+            List<String> partFiles = listPartFiles(bucketName, s3InputFolder, s3OutputFolder);
 
-            File arffFile = createArffFile(partFiles, bucketName);
+            File arffFile = createArffFile(partFiles, bucketName, s3OutputFolder);
 
-            File analysisFile = evaluateClassifier(arffFile);
+            evaluateClassifier(arffFile, s3OutputFolder);
 
-            uploadResults(bucketName, arffFile, analysisFile, s3OutputFolder);
 
         }catch (AmazonClientException e) {
             // S3 or AWS related exceptions
