@@ -82,7 +82,7 @@ public class Step2 {
     }
 
     ///
-    /// Partition by the second word
+    /// Partition by the first word
     ///
     public static class PartitionerClass extends Partitioner<Text, Text> {
 

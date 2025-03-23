@@ -1,5 +1,5 @@
 # Semantic Similarity System Using MapReduce
-by Liz Gokhvat [username: lizgo , id: 208005777] , Ido Toker [username: idoto , id: 207942186]
+by Liz Gokhvat and Ido Toker
 ## Overview
 
 This project implements the algorithm described in 'Comparing Measures of Semantic Similarity' by Nikola Ljubešić et al. with some modifications.
